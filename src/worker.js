@@ -17,7 +17,22 @@ async function webhook(request, env, origin) {
   if (!expected.length || received.length !== expected.length || !timingSafeEqual(received,expected)) {
     fail(403,'Запрос отклонён');
   }
-  const {message} = await body(request);
+  const {message, inline_query: query} = await body(request);
+  if (query) {
+    const games = [['draughts','Русские шашки'],['chess','Шахматы']];
+    const search = query.query.trim().toLowerCase();
+    const results = games.filter(([id,title]) => id.includes(search) || title.toLowerCase().includes(search))
+      .map(([id,title]) => ({
+        type:'article',id,title,description:'Создать партию и пригласить друга',
+        input_message_content:{message_text:title+' в «Доске»'},
+        reply_markup:{inline_keyboard:[[{text:'Создать партию',url:'https://t.me/'+env.BOT_USERNAME+'?startapp='+id}]]}
+      }));
+    const response = await fetch('https://api.telegram.org/bot'+env.BOT_TOKEN+'/answerInlineQuery',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({inline_query_id:query.id,results,cache_time:60})
+    });
+    if (!response.ok) fail(502,'Telegram не принял карточки');
+  }
   if (message?.chat?.type === 'private' && /^\/start(?:@\w+)?(?:\s|$)/.test(message.text ?? '')) {
     const response = await fetch('https://api.telegram.org/bot'+env.BOT_TOKEN+'/sendMessage',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -61,11 +76,21 @@ async function room(request, env, path) {
     if (!move) fail(400,'Недопустимый ход');
     history.push({from:move.from,to:move.to,promotion:move.promotion});
     state = position(row.game,history);
-    const updated = await db.prepare('UPDATE rooms SET history = ? WHERE id = ? AND history = ?')
-      .bind(JSON.stringify(history),id,row.history).run();
+    const updated = await db.prepare('UPDATE rooms SET history = ?, result = ? WHERE id = ? AND history = ?')
+      .bind(JSON.stringify(history),state.result,id,row.history).run();
     if (!updated.meta.changes) fail(409,'Позиция уже изменилась');
   }
-  return Response.json({...state,id,game:row.game,side,ready,version:history.length,
+  let score = null;
+  if (ready) {
+    const opponent = side === 'w' ? row.black : row.white;
+    score = await db.prepare(
+      "SELECT count(CASE WHEN result = 'draw' THEN 1 END) AS draws, "+
+      "count(CASE WHEN (white = ?1 AND result = 'w') OR (black = ?1 AND result = 'b') THEN 1 END) AS wins, "+
+      "count(CASE WHEN (white = ?1 AND result = 'b') OR (black = ?1 AND result = 'w') THEN 1 END) AS losses "+
+      "FROM rooms WHERE result IS NOT NULL AND ((white = ?1 AND black = ?2) OR (white = ?2 AND black = ?1))"
+    ).bind(user,opponent).first();
+  }
+  return Response.json({...state,id,game:row.game,side,ready,score,version:history.length,
     moves:ready && state.turn === side ? state.moves : [],
     invite:'https://t.me/'+env.BOT_USERNAME+'?startapp='+id},{headers:{'Cache-Control':'no-store'}});
 }

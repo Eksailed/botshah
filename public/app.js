@@ -37,6 +37,12 @@ function show(next) {
   state = next;
   last = next.id;
   try { localStorage.setItem('last-room',last); } catch {}
+  const score = el('score');
+  score.hidden = !state.score;
+  if (state.score) {
+    const {wins,losses,draws} = state.score;
+    score.textContent = 'С этим соперником: побед '+wins+' · поражений '+losses+' · ничьих '+draws;
+  }
   el('title').textContent = labels[state.game];
   el('lobby').hidden = true;
   el('game').hidden = false;
@@ -136,11 +142,14 @@ if (!tg?.initData) {
   lobby();
   const invite = tg.initDataUnsafe?.start_param;
   if (roomId.test(invite)) perform(async () => show(await api('/'+invite+'/join',{})));
+  else if (invite === 'chess' || invite === 'draughts') {
+    perform(async () => show(await api('',{game:invite})));
+  }
   setInterval(() => {
     if (state && !state.result && !document.hidden) {
       perform(async () => {
         const next = await api('/'+state.id);
-        if (next.version !== state.version || next.ready !== state.ready) show(next);
+        if (next.version !== state.version || next.ready !== state.ready || JSON.stringify(next.score) !== JSON.stringify(state.score)) show(next);
       });
     }
   },2000);
