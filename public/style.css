@@ -272,3 +272,23 @@ main:has(#game:not([hidden])) #error:empty { display: none; }
   #game .actions button { padding-block: 6px; }
   .board-files { padding-top: 1px; }
 }
+
+/* Матч: максимум места для игровой доски. */
+main:has(#game:not([hidden])) {
+  width: min(100%, 680px);
+  padding: 6px clamp(5px,1.5vw,10px);
+}
+main:has(#game:not([hidden])) h1 { font-size: clamp(18px,4.4vw,25px); line-height: 1.08; }
+main:has(#game:not([hidden])) #status:not(.match-status) { margin: 3px 0; min-height: 0; font-size: 12px; }
+#game:not([hidden]) { gap: 4px; margin-top: 4px; }
+#game .player-panel { min-height: 28px; padding: 3px 7px; gap: 5px; }
+#game .player-panel strong, #game .player-clock { font-size: 12px; }
+#game .player-disc { flex-basis: 16px; }
+#game .turn-mark { padding: 2px 4px; font-size: 10px; }
+#game #score { font-size: 11px; line-height: 1.15; }
+#game .board-frame { grid-template-columns: 12px minmax(0,1fr); }
+#game .board-ranks, #game .board-files { font-size: 10px; }
+#game .board-files { padding-top: 1px; }
+#game .actions { gap: 4px; }
+#game .actions button { padding: 5px 8px; min-height: 32px; font-size: 12px; }
+#game .actions #invite { flex: 1 1 auto; }

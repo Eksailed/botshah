@@ -168,7 +168,7 @@ function updateBoardFrame() {
   el('opponent-name').textContent = state.ready ? 'Соперник' : 'Место свободно';
   el('self-turn').hidden = !playing || state.turn !== state.side;
   el('opponent-turn').hidden = !playing || state.turn === state.side;
-  el('status').classList.toggle('match-status',playing);
+  el('status').classList.toggle('match-status',!state.task && !state.result);
   for (const [id,values] of [['files',white ? 'abcdefgh' : 'hgfedcba'],['ranks',white ? '87654321' : '12345678']]) {
     if (el(id).textContent === values) continue;
     el(id).replaceChildren(...Array.from(values, value => {
