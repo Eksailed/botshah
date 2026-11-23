@@ -328,3 +328,19 @@ main:has(#game:not([hidden])) #status:not(.match-status) { margin: 3px 0; min-he
   background: #11271c;
   box-shadow: inset 0 2px 5px #08170fa0;
 }
+
+main:has(#extras:not([hidden])) {
+  --nav-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-content-safe-area-inset-bottom, 0px));
+  padding-bottom: calc(90px + var(--nav-safe-bottom));
+  min-height: 100dvh;
+}
+#extras .club-nav {
+  position: fixed;
+  z-index: 5;
+  left: 50%;
+  bottom: calc(10px + var(--nav-safe-bottom));
+  transform: translateX(-50%);
+  width: min(calc(100% - 28px), 512px);
+  margin: 0;
+  box-shadow: 0 -4px 18px #07180f90;
+}
