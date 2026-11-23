@@ -16,7 +16,7 @@ export function position(game, history, fen) {
   let state = initial();
   const seen = new Map();
   const count = () => {
-    if (state.chain !== null) return 0;
+    if (state.chain !== null || state.huff?.length) return 0;
     const key = JSON.stringify([state.turn,state.board]);
     const times = (seen.get(key) ?? 0)+1;
     seen.set(key,times);
@@ -25,13 +25,13 @@ export function position(game, history, fen) {
   const replay = [];
   let repetitions = count();
   for (const move of history) {
-    state = step(state, move);
+    state = step(state, move, true);
     replay.push({move,board:state.board,taken:state.taken});
     if (replay.length > 12) replay.shift();
     repetitions = count();
   }
-  const current = {...draughts(state),replay};
-  if (!current.result && (repetitions >= 3 || state.quiet >= 30)) {
+  const current = {...draughts(state,true),replay};
+  if (!current.result && !current.huff?.length && (repetitions >= 3 || state.quiet >= 30)) {
     return {...current,result:'draw',moves:[]};
   }
   return current;

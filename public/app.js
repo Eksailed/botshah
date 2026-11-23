@@ -41,7 +41,7 @@ const cell = index => el('board').children[state.side === 'b' ? 63-index : index
 async function animateMove(move, after) {
   const piece = state.board[move.from];
   const source = cell(move.from);
-  if (!piece || !source || typeof source.animate !== 'function') return;
+  if (move.from === move.to || !piece || !source || typeof source.animate !== 'function') return;
   const draughts = state.game === 'draughts';
   const lines = [[move.from,move.to]];
   const castle = !draughts && piece[1] === 'k' && Math.abs(move.from-move.to) === 2;
@@ -130,7 +130,7 @@ async function show(next) {
   const color = state.side === 'w' ? 'белыми' : 'чёрными';
   const turn = state.turn === state.side ? 'Ваш ход' : 'Ход соперника';
   const result = state.result === 'draw' ? 'Ничья' : state.result === state.side ? 'Вы выиграли' : 'Соперник выиграл';
-  el('status').textContent = state.task ?? (state.result ? result : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника'));
+  el('status').textContent = state.huff?.length && state.turn === state.side ? 'Выберите шашку, которую хотите снять' : state.task ?? (state.result ? result : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника'));
   actions();
   draw();
 }
@@ -174,9 +174,10 @@ function updateBoardFrame() {
   el('self-panel').dataset.side = state.side;
   el('opponent-panel').dataset.side = white ? 'b' : 'w';
   el('opponent-name').textContent = state.ready ? 'Соперник' : 'Место свободно';
+  el('self-turn').textContent = state.huff?.length ? 'Снимите шашку' : 'Ваш ход';
   el('self-turn').hidden = !playing || state.turn !== state.side;
   el('opponent-turn').hidden = !playing || state.turn === state.side;
-  el('status').classList.toggle('match-status',!state.task && !state.result);
+  el('status').classList.toggle('match-status',!state.task && !state.result && !(state.huff?.length && state.turn === state.side));
   for (const [id,values] of [['files',white ? 'abcdefgh' : 'hgfedcba'],['ranks',white ? '87654321' : '12345678']]) {
     if (el(id).textContent === values) continue;
     el(id).replaceChildren(...Array.from(values, value => {
@@ -210,6 +211,7 @@ function draw() {
     if (piece?.[0] === 'w') button.classList.add('white');
     if (state.mateSquare === index) button.classList.add('mate-square');
     if (display.lastMove?.from === index || display.lastMove?.to === index) button.classList.add('last-move');
+    if (!review && state.huff?.includes(index) && state.side === state.turn) button.classList.add('huff-target');
     if (selected === index) button.classList.add('selected');
     if (targets.has(index)) button.classList.add('target');
     const coordinate = 'abcdefgh'[index%8]+(8-(index>>3));
@@ -256,6 +258,11 @@ async function perform(action) {
 
 function select(index) {
   if (busy || review || state.solved) return;
+  if (state.huff?.length) {
+    const penalty = state.moves.find(move => move.from === index);
+    if (penalty) return send(penalty);
+    return;
+  }
   choice = state.moves.filter(m => m.from === selected && m.to === index);
   if (choice.length === 1) return send(choice[0]);
   if (state.task && !choice.length && selected !== undefined && state.board[index]?.[0] !== state.side) {

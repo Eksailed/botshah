@@ -8,7 +8,10 @@ export function initial() {
   })};
 }
 
-export function draughts(state) {
+export function draughts(state, allowHuff = false) {
+  if (allowHuff && state.huff?.length) {
+    return {...state,moves:state.huff.map(square => ({from:square,to:square})),result:null};
+  }
   const {board,turn,chain,taken} = state;
   const captures = [], quiet = [];
   for (const [from,piece] of board.entries()) {
@@ -33,15 +36,20 @@ export function draughts(state) {
       }
     }
   }
-  const moves = captures.length ? captures : chain === null ? quiet : [];
+  const moves = chain !== null ? captures : allowHuff ? [...captures,...quiet] : captures.length ? captures : quiet;
   return {...state,moves,result:moves.length ? null : turn === 'w' ? 'b' : 'w'};
 }
 
-export function step(state, move) {
-  const legal = draughts(state).moves.find(m => m.from === move.from && m.to === move.to);
+export function step(state, move, allowHuff = false) {
+  const options = draughts(state,allowHuff).moves;
+  const legal = options.find(m => m.from === move.from && m.to === move.to);
   if (!legal) throw new Error('Недопустимый ход');
   const {from,to,victim} = legal;
   const board = [...state.board];
+  if (from === to) {
+    board[from] = null;
+    return {...state,board,huff:[],quiet:0};
+  }
   const piece = board[from];
   board[to] = (to >> 3) === (state.turn === 'w' ? 0 : 7) ? state.turn+'k' : piece;
   board[from] = null;
@@ -49,5 +57,8 @@ export function step(state, move) {
   const next = {board,turn:state.turn,chain:to,taken,quiet:piece[1] === 'k' && !taken.length ? (state.quiet ?? 0)+1 : 0};
   if (taken.length && draughts(next).moves.length) return next;
   for (const square of taken) board[square] = null;
-  return {...next,turn:state.turn === 'w' ? 'b' : 'w',chain:null,taken:[]};
+  const huff = allowHuff && victim === undefined
+    ? [...new Set(options.filter(m => m.victim !== undefined).map(m => m.from === from ? to : m.from))]
+    : [];
+  return {...next,huff,turn:state.turn === 'w' ? 'b' : 'w',chain:null,taken:[]};
 }
