@@ -353,3 +353,12 @@ if (!tg?.initData) {
     }
   },2000);
 }
+
+const clubArt = new Image();
+clubArt.onload = () => {
+  const crops = {hero:[0,79,499,232],draughts:[244,501,250,120],chess:[244,648,250,120]};
+  for (const canvas of document.querySelectorAll('[data-club-art]')) {
+    canvas.getContext('2d')?.drawImage(clubArt,...crops[canvas.dataset.clubArt],0,0,canvas.width,canvas.height);
+  }
+};
+clubArt.src = '/club-art.png';

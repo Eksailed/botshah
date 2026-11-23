@@ -88,7 +88,8 @@ body:has(#extras:not([hidden])) {
   margin-top: 10px;
   border: 1px solid #947645;
   border-radius: 12px;
-  background: #142d20 url('/club-art.png') 0 10% / 308% auto no-repeat;
+  background: #142d20;
+  overflow: hidden;
   box-shadow: 0 8px 24px #05110cb0;
 }
 #lobby { gap: 10px; }
@@ -111,14 +112,15 @@ body:has(#extras:not([hidden])) {
   border: 1px solid #927441;
   font: 700 clamp(17px,5vw,23px) Georgia,serif;
 }
-.club-tile::before, .club-tile::after {
+.club-tile canvas, .club-tile::after {
   content: '';
   position: absolute;
   inset: 0 0 0 50%;
   z-index: -1;
 }
-.club-tile::before { background: url('/club-art.png') 19% 55% / 615% auto no-repeat; }
-.chess-tile::before { background-position: 19% 73%; }
+
+.club-hero canvas { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.club-tile canvas { width: 50%; height: 100%; object-fit: cover; pointer-events: none; }
 .club-tile::after { background: linear-gradient(90deg,#142c21,transparent 46%); }
 .club-nav {
   display: grid;
