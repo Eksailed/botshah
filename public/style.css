@@ -431,3 +431,29 @@ main:has(#party-panel:not([hidden]) .room-empty) {
 }
 
 #game .huff-target { box-shadow: inset 0 0 0 3px #ffda68,inset 0 0 12px #f2ab475e; }
+
+#opponent-mode, #draughts-rules {
+  padding: 10px;
+  color: #fff0cc;
+  background: #2c4840;
+  border: 1px solid #a98a52;
+  border-radius: 8px;
+  font: inherit;
+}
+.archive-tabs { margin: 0 0 8px; }
+#extras .archive-tabs button[aria-pressed="true"] {
+  background: linear-gradient(#ffe1a0,#d9aa57);
+  color: #30230d;
+}
+#series-panel { margin-top: 10px; }
+#game #game-rule { font-size: 11px; color: #e6d5ad; }
+#game #puzzle-next {
+  background: linear-gradient(#ffe1a0,#d9aa57);
+  color: #30230d;
+  font-weight: 750;
+}
+#game .actions :is(#draw-offer,#draw-decline,#training-undo) {
+  border: 1px solid #a98a52;
+}
+
+dialog { max-height: calc(100dvh - 22px); overflow-y: auto; }

@@ -5,7 +5,9 @@ const symbols = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 const names = {k:'король',q:'ферзь',r:'ладья',b:'слон',n:'конь',p:'пешка'};
 const roomId = /^[a-f0-9]{24}$/;
 let state, selected, busy = false, choice = [];
-let last, review, clockReceived, setupGame, continueId;
+let last, review, clockReceived, setupGame, continueId, computerTimer;
+const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',resign:'Сдача',timeout:'Время вышло',
+  agreement:'По согласию',rules:'По правилам игры'};
 
 async function api(path,body) {
   const response = await fetch('/api/rooms'+path,{
@@ -20,6 +22,7 @@ async function api(path,body) {
 }
 
 function lobby() {
+  clearTimeout(computerTimer);
   state = selected = review = undefined;
   el('extras').hidden = false;
   el('room-list').replaceChildren();
@@ -115,6 +118,10 @@ async function show(next) {
     ? (next.game === 'chess' ? '✓ Задача решена. Мат!' : '✓ Задача решена. Шашка взята!')
     : next.solved === false ? 'Этот ход не решает задачу. Попробуйте другой.' : '';
   el('puzzle-retry').hidden = !next.solved;
+  el('puzzle-next').hidden = !next.solved || !next.series || next.series.index+1 >= next.series.total;
+  if (next.solved && next.series && next.series.index+1 === next.series.total) {
+    feedback.textContent = '✓ Серия завершена ('+next.series.total+' из '+next.series.total+')';
+  }
   el('back').textContent = next.task ? 'К задачам' : 'К выбору игры';
   if (!next.task) last = next.id;
   try { if (!next.task) localStorage.setItem('last-room',last); } catch {}
@@ -130,14 +137,25 @@ async function show(next) {
   const color = state.side === 'w' ? 'белыми' : 'чёрными';
   const turn = state.turn === state.side ? 'Ваш ход' : 'Ход соперника';
   const result = state.result === 'draw' ? 'Ничья' : state.result === state.side ? 'Вы выиграли' : 'Соперник выиграл';
-  el('status').textContent = state.huff?.length && state.turn === state.side ? 'Выберите шашку, которую хотите снять' : state.task ?? (state.result ? result : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника'));
+  el('status').textContent = state.huff?.length && state.turn === state.side ? 'Выберите шашку, которую хотите снять' : state.task ? state.task+(state.series ? ' · '+(state.series.index+1)+'/'+state.series.total : '') : (state.result ? result+(state.reason ? ' · '+reasons[state.reason] : '') : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника'));
   actions();
   draw();
+  scheduleComputer();
 }
 
 function actions() {
+  const rule = el('game-rule');
+  rule.hidden = state.task || state.game !== 'draughts';
+  rule.textContent = state.rules === 'strict' ? 'Обязательное взятие' : 'За фук';
+  const canDraw = state.ready && !state.task && !state.training && !state.result && !review;
+  el('draw-offer').hidden = !canDraw;
+  el('draw-offer').disabled = state.drawOffer === 'sent';
+  el('draw-offer').textContent = state.drawOffer === 'received' ? 'Принять ничью'
+    : state.drawOffer === 'sent' ? 'Ничья предложена' : 'Предложить ничью';
+  el('draw-decline').hidden = !canDraw || state.drawOffer !== 'received';
+  el('training-undo').hidden = !state.training || !state.version || Boolean(review);
   const rematch = el('rematch');
-  rematch.hidden = !state.result || !state.ready || Boolean(review);
+  rematch.hidden = !state.result || !state.ready || Boolean(state.training || review);
   rematch.disabled = state.offer === 'sent' && !state.rematch;
   rematch.textContent = state.rematch ? 'Открыть реванш' : state.offer === 'received'
     ? 'Принять реванш' : state.offer === 'sent' ? 'Реванш предложен' : 'Реванш';
@@ -173,7 +191,7 @@ function updateBoardFrame() {
   el('self-panel').hidden = el('opponent-panel').hidden = panelHidden;
   el('self-panel').dataset.side = state.side;
   el('opponent-panel').dataset.side = white ? 'b' : 'w';
-  el('opponent-name').textContent = state.ready ? 'Соперник' : 'Место свободно';
+  el('opponent-name').textContent = state.training ? 'Компьютер' : state.ready ? 'Соперник' : 'Место свободно';
   el('self-turn').textContent = state.huff?.length ? 'Снимите шашку' : 'Ваш ход';
   el('self-turn').hidden = !playing || state.turn !== state.side;
   el('opponent-turn').hidden = !playing || state.turn === state.side;
@@ -280,7 +298,7 @@ function send(move) {
     if (state.task) {
       selected = undefined;
       choice = [];
-      await show(await api('/puzzle',{game:state.game,move}));
+      await show(await api('/puzzle',{game:state.game,move,series:state.series}));
       return;
     }
     const path = '/'+state.id;
@@ -298,7 +316,7 @@ function menuTab(id) {
   }
   el('lobby').hidden = id !== 'play-tab';
   el('party-panel').hidden = id !== 'my-games';
-  el('puzzle-panel').hidden = id !== 'puzzle-tab';
+  el('puzzle-panel').hidden = el('series-panel').hidden = id !== 'puzzle-tab';
 }
 async function refreshContinue() {
   try {
@@ -326,26 +344,70 @@ for (const button of document.querySelectorAll('[data-game]')) {
     if (busy) return;
     setupGame = button.dataset.game;
     el('setup-title').textContent = labels[setupGame];
+    el('opponent-mode').value = 'friend';
+    el('rules-label').hidden = el('draughts-rules').hidden = setupGame !== 'draughts';
+    updateSetupClock();
     el('setup').returnValue = '';
     el('setup').showModal();
   };
 }
+function updateSetupClock() {
+  el('clock-label').hidden = el('clock-mode').hidden = el('opponent-mode').value !== 'friend';
+}
+el('opponent-mode').onchange = updateSetupClock;
 el('setup').onclose = () => {
   if (el('setup').returnValue !== 'create') return;
-  perform(async () => show(await api('',{game:setupGame,clock:el('clock-mode').value})));
+    const mode = el('opponent-mode').value;
+  perform(async () => show(await api('',{game:setupGame,clock:mode === 'friend' ? el('clock-mode').value : 'none',
+    rules:el('draughts-rules').value,training:mode === 'friend' ? null : mode})));
 };
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));
 }
-async function loadRooms() {
+function scheduleComputer() {
+  clearTimeout(computerTimer);
+  if (!state?.training || state.result || state.turn !== 'b' || review) return;
+  computerTimer = setTimeout(() => {
+    if (busy) return scheduleComputer();
+    if (!state?.training || state.result || state.turn !== 'b') return;
+    perform(async () => {
+      const path = '/'+state.id;
+      try { await show(await api(path+'/computer',{version:state.version})); }
+      catch (error) {
+        if (error.status === 409) await show(await api(path));
+        else throw error;
+      }
+    });
+  },250);
+}
+for (const button of document.querySelectorAll('[data-series]')) {
+  const kind = button.dataset.series;
+  button.onclick = () => perform(async () => show(await api('/puzzle',{
+    game:kind === 'mate' ? 'chess' : 'draughts',series:{kind,index:0}
+  })));
+}
+el('puzzle-next').onclick = () => perform(async () => show(await api('/puzzle',{
+  game:state.game,series:{kind:state.series.kind,index:state.series.index+1}
+})));
+el('draw-offer').onclick = () => perform(async () => show(await api('/'+state.id+'/draw',{
+  intent:state.drawOffer === 'received' ? 'accept' : 'offer'
+})));
+el('draw-decline').onclick = () => perform(async () => show(await api('/'+state.id+'/draw',{intent:'decline'})));
+el('training-undo').onclick = () => {
+  clearTimeout(computerTimer);
+  perform(async () => show(await api('/'+state.id+'/undo',{version:state.version})));
+};
+async function loadRooms(archived = false) {
   menuTab('my-games');
-  const {rooms} = await api('');
+  el('active-rooms').setAttribute('aria-pressed',String(!archived));
+  el('archived-rooms').setAttribute('aria-pressed',String(archived));
+  const {rooms} = await api(archived ? '/archive' : '');
   const list = el('room-list');
   list.replaceChildren();
   if (!rooms.length) {
     const empty = document.createElement('p');
     empty.className = 'room-empty';
-    empty.textContent = 'Активных партий пока нет';
+    empty.textContent = archived ? 'Завершённых партий пока нет' : 'Активных партий пока нет';
     list.append(empty);
   }
   for (const room of rooms) {
@@ -360,11 +422,22 @@ async function loadRooms() {
     title.textContent = labels[room.game];
     const status = document.createElement('small');
     status.textContent = !room.ready ? 'Ждём соперника' : room.yourTurn ? 'Ваш ход' : 'Ход соперника';
-    if (room.ready && room.yourTurn) button.classList.add('your-turn');
+    if (archived) {
+      const outcome = room.result === 'draw' ? 'Ничья' : (room.result === 'w') === Boolean(room.isWhite) ? 'Победа' : 'Поражение';
+      const date = room.date ? new Intl.DateTimeFormat('ru',{day:'numeric',month:'short'}).format(room.date) : null;
+      status.textContent = [outcome,room.training ? 'Компьютер' : room.opponent || 'Соперник',date].filter(Boolean).join(' · ');
+    } else if (room.training) {
+      status.textContent = 'Тренировка с компьютером';
+    }
+    if (!archived && room.ready && room.yourTurn) button.classList.add('your-turn');
     title.append(status);
     button.append(art,title);
     paintClubArt(art);
     button.onclick = () => perform(async () => show(await api('/'+room.id)));
+    if (archived) {
+      list.append(button);
+      continue;
+    }
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'room-close';
@@ -390,7 +463,8 @@ async function loadRooms() {
     list.append(row);
   }
 }
-el('my-games').onclick = () => perform(loadRooms);
+el('my-games').onclick = el('active-rooms').onclick = () => perform(loadRooms);
+el('archived-rooms').onclick = () => perform(() => loadRooms(true));
 el('rematch').onclick = () => perform(async () => {
   const next = state.rematch ? state : await api('/'+state.id+'/rematch',{});
   await show(next.rematch ? await api('/'+next.rematch) : next);
@@ -416,7 +490,7 @@ el('notifications').onclick = () => perform(async () => {
   showPreference((await api('/preferences',{enabled:!enabled})).enabled);
 });
 el('resume').onclick = () => perform(async () => show(await api('/'+continueId)));
-el('puzzle-retry').onclick = () => perform(async () => show(await api('/puzzle',{game:state.game})));
+el('puzzle-retry').onclick = () => perform(async () => show(await api('/puzzle',{game:state.game,series:state.series ? {kind:state.series.kind,index:state.series.index} : null})));
 el('back').onclick = () => {
   if (busy) return;
   const fromPuzzle = Boolean(state?.task);
@@ -424,7 +498,9 @@ el('back').onclick = () => {
   if (fromPuzzle) menuTab('puzzle-tab');
 };
 el('invite').onclick = () => {
-  const url = 'https://t.me/share/url?url='+encodeURIComponent(state.invite);
+  const description = labels[state.game]+(state.game === 'draughts'
+    ? (state.rules === 'strict' ? ' · Обязательное взятие' : ' · За фук') : '');
+  const url = 'https://t.me/share/url?url='+encodeURIComponent(state.invite)+'&text='+encodeURIComponent(description);
   tg.openTelegramLink(url);
 };
 
@@ -438,15 +514,18 @@ if (!tg?.initData) {
   lobby();
   const invite = tg.initDataUnsafe?.start_param;
   if (roomId.test(invite)) perform(async () => show(await api('/'+invite+'/join',{})));
+  else if (typeof invite === 'string' && invite.startsWith('i_')) {
+    perform(async () => show(await api('/challenge',{payload:invite})));
+  }
   else if (invite === 'chess' || invite === 'draughts') {
     perform(async () => show(await api('',{game:invite})));
   }
   setInterval(drawClocks,250);
   setInterval(() => {
-    if (state && !state.task && !review && !document.hidden && (!state.result || !state.rematch)) {
+    if (state && !state.task && !state.training && !review && !document.hidden && (!state.result || !state.rematch)) {
       perform(async () => {
         const next = await api('/'+state.id);
-        if (next.version !== state.version || next.ready !== state.ready || next.result !== state.result || next.offer !== state.offer || next.rematch !== state.rematch || JSON.stringify(next.score) !== JSON.stringify(state.score)) await show(next);
+        if (next.version !== state.version || next.ready !== state.ready || next.result !== state.result || next.drawOffer !== state.drawOffer || next.offer !== state.offer || next.rematch !== state.rematch || JSON.stringify(next.score) !== JSON.stringify(state.score)) await show(next);
       });
     }
   },2000);

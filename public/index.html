@@ -19,10 +19,21 @@
     <button class="club-tile chess-tile" data-game="chess"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Шахматы</span></button>
   </section>
   <section id="extras" hidden>
-    <div id="party-panel" hidden><div id="room-list"></div></div>
+    <div id="party-panel" hidden>
+      <div class="actions archive-tabs">
+        <button id="active-rooms" type="button">Активные</button>
+        <button id="archived-rooms" type="button">Завершённые</button>
+      </div>
+      <div id="room-list"></div>
+    </div>
     <div id="puzzle-panel" hidden class="actions">
       <button class="club-tile" data-puzzle="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Русские шашки<small>Задача дня</small></span></button>
       <button class="club-tile" data-puzzle="chess"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Шахматы<small>Задача дня</small></span></button>
+    </div>
+    <div id="series-panel" class="actions" hidden>
+      <button data-series="mate">Мат в один</button>
+      <button data-series="chain">Серия взятий</button>
+      <button data-series="crown">Превращение в дамку</button>
     </div>
     <nav class="club-nav" aria-label="Главное меню">
       <button id="play-tab" aria-pressed="true"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Играть</span></button>
@@ -33,7 +44,18 @@
   <dialog id="setup">
     <form method="dialog">
       <h2 id="setup-title"></h2>
-      <label for="clock-mode">Контроль времени</label>
+      <label for="opponent-mode">С кем играть</label>
+      <select id="opponent-mode">
+        <option value="friend">С другом</option>
+        <option value="easy">Компьютер · лёгкий</option>
+        <option value="normal">Компьютер · обычный</option>
+      </select>
+      <label id="rules-label" for="draughts-rules">Правила взятия</label>
+      <select id="draughts-rules">
+        <option value="huff">За фук</option>
+        <option value="strict">Обязательное взятие</option>
+      </select>
+      <label id="clock-label" for="clock-mode">Контроль времени</label>
       <select id="clock-mode">
         <option value="none">Без часов</option>
         <option value="rapid">5 мин + 3 с за ход</option>
@@ -57,6 +79,7 @@
       <button id="next-ply">Вперёд →</button><button id="exit-review">К результату</button>
     </div>
     <p id="score" hidden></p>
+    <p id="game-rule" hidden></p>
     <div id="opponent-panel" class="player-panel" hidden>
       <span class="player-disc" aria-hidden="true"></span>
       <strong id="opponent-name">Соперник</strong><span id="opponent-turn" class="turn-mark" hidden>Ход соперника</span>
@@ -80,6 +103,10 @@
       <button id="invite">Пригласить друга</button>
       <button id="rematch" hidden>Реванш</button>
       <button id="review" hidden>Посмотреть ходы</button>
+      <button id="draw-offer" hidden>Предложить ничью</button>
+      <button id="draw-decline" hidden>Отклонить</button>
+      <button id="training-undo" hidden>Отменить ход</button>
+      <button id="puzzle-next" hidden>Следующая задача</button>
       <button id="puzzle-retry" hidden>Повторить</button>
       <button id="back">К выбору игры</button>
     </div>

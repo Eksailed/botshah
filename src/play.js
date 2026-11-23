@@ -9,34 +9,57 @@ const chessTasks = [
   '8/8/8/8/8/r7/5k2/7K b - - 0 1'
 ];
 const draughtsTasks = [[42,35],[44,35],[40,33]];
-export function puzzle(game, input, date = new Date()) {
+const seriesTasks = {
+  mate:['7k/5K2/R7/8/8/8/8/8 w - - 0 1','k7/2K5/7R/8/8/8/8/8 w - - 0 1','8/8/8/8/8/r7/5k2/7K b - - 0 1'],
+  chain:[[41,34,20],[46,37,19],[42,35,21]],
+  crown:[[17,10],[19,12],[21,14]]
+};
+export function puzzle(game, input, date = new Date(), series) {
   const day = Math.floor((date.getTime()+10800000)/86400000);
   if (game !== 'chess' && game !== 'draughts') fail(400,'Выберите игру');
-  let state, solve;
+  const kind = series?.kind;
+  const batch = kind && Object.hasOwn(seriesTasks,kind) ? seriesTasks[kind] : null;
+  const index = series?.index ?? 0;
+  const past = series?.history ?? [];
+  if (series && (!batch || (kind === 'mate') !== (game === 'chess') || !Number.isInteger(index) ||
+    index < 0 || index >= batch.length || !Array.isArray(past) || past.length > 8)) fail(400,'Задача не найдена');
+  let state, nextPosition, goal;
   if (game === 'chess') {
-    const fen = chessTasks[day%chessTasks.length];
+    const fen = batch?.[index] ?? chessTasks[day%chessTasks.length];
     state = position(game,[],fen);
-    solve = move => {
-      const next = position(game,[move],fen);
-      return next.result === state.turn ? next : null;
-    };
+    nextPosition = (_,move) => position(game,[move],fen);
+    goal = next => next.result === state.turn;
   } else {
-    const [from,victim] = draughtsTasks[day%draughtsTasks.length];
+    const [from,...victims] = batch?.[index] ?? draughtsTasks[day%draughtsTasks.length];
     const board = Array(64).fill(null);
     board[from] = 'wp';
-    board[victim] = 'bp';
+    for (const victim of victims) board[victim] = 'bp';
     state = draughts({board,turn:'w',chain:null,taken:[]});
-    solve = move => move.victim === victim ? step(state,move) : null;
+    for (const move of past) {
+      if (!move || !state.moves.some(m => m.from === move.from && m.to === move.to)) fail(400,'Ход не найден');
+      const next = step(state,move);
+      if (next.chain === null) fail(400,'Серия взятий закончилась');
+      state = draughts(next);
+    }
+    nextPosition = (current,move) => step(current,move);
+    goal = next => next.chain === null && (kind === 'crown' ? next.board.includes('wk') : !next.board.includes('bp'));
   }
   const move = state.moves.find(m => m.from === input?.from && m.to === input?.to && m.promotion === input?.promotion);
-  const final = move ? solve(move) : null;
-  const solved = input ? Boolean(final) : null;
-  return {id:'puzzle',game,board:final?.board ?? state.board,taken:final?.taken,
-    side:state.turn,turn:final?.turn ?? state.turn,ready:true,
-    moves:final ? [] : state.moves,version:final ? 1 : 0,
-    lastMove:final ? move : null,
-    mateSquare:final && game === 'chess' ? final.board.indexOf(final.turn+'k') : null,
-    task:game === 'chess' ? 'Поставьте мат в один ход' : 'Возьмите шашку соперника',solved};
+  const next = move ? nextPosition(state,move) : null;
+  const solved = Boolean(next && goal(next));
+  const continuing = Boolean(next && game === 'draughts' && next.chain !== null);
+  const advanced = solved || continuing;
+  const shown = advanced ? next : state;
+  const history = continuing ? [...past,{from:move.from,to:move.to}] : past;
+  const task = kind === 'chain' ? 'Возьмите все шашки за один ход' : kind === 'crown' ? 'Превратите шашку в дамку'
+    : game === 'chess' ? 'Поставьте мат в один ход' : 'Возьмите шашку соперника';
+  return {id:'puzzle',game,board:shown.board,taken:shown.taken,chain:shown.chain,
+    side:state.turn,turn:shown.turn,ready:true,
+    moves:solved ? [] : continuing ? draughts(shown).moves : state.moves,
+    version:past.length+Number(advanced),lastMove:advanced ? move : null,
+    mateSquare:solved && game === 'chess' ? shown.board.indexOf(shown.turn+'k') : null,
+    series:batch ? {kind,index,total:batch.length,history} : null,
+    task,solved:input && !continuing ? solved : null};
 }
 
 export async function notifyTurn(env, user, id) {
