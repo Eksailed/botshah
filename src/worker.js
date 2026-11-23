@@ -26,6 +26,8 @@ async function webhook(request, env, origin) {
     const results = games.filter(([id,title]) => id.includes(search) || title.toLowerCase().includes(search))
       .map(([id,title,rules]) => ({
         type:'article',id:id+'-'+rules,title,description:'Общая партия для двоих',
+        thumbnail_url:(env.APP_URL || origin).replace(/\/+$/,'')+'/inline-'+id+'.jpg',
+        thumbnail_width:160,thumbnail_height:160,
         input_message_content:{message_text:title+' в «Доске»'},
         reply_markup:{inline_keyboard:[[{text:'Открыть партию',url:'https://t.me/'+env.BOT_USERNAME+'?startapp='+challenge(env.BOT_TOKEN,query.from.id,id,rules,roomId())}]]}
       }));
