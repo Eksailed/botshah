@@ -479,3 +479,48 @@ dialog { max-height: calc(100dvh - 22px); overflow-y: auto; }
   background: linear-gradient(#ffe1a0,#d9aa57);
   color: #30230d;
 }
+
+#series-panel { margin-top: 17px; }
+#series-title {
+  margin: 0 0 8px;
+  color: #f6dfac;
+  font: 700 21px var(--font-display);
+}
+.series-grid { display: grid; gap: 8px; }
+#extras .series-grid .club-tile { min-height: 66px; font-size: clamp(16px,4.4vw,20px); }
+
+#extras #training-toggle { min-height: 90px; padding-right: 31%; }
+#training-toggle canvas {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+}
+#training-toggle::after {
+  inset: 0;
+  background: linear-gradient(90deg,#142c21 7%,#142c21d9 45%,transparent 83%);
+}
+#training-toggle span::after {
+  content: '›';
+  display: inline-block;
+  margin-left: 7px;
+  color: #f4d88f;
+}
+#training-toggle[aria-expanded="true"] { border-color: #e8bf74; }
+#training-toggle[aria-expanded="true"] span::after { transform: rotate(90deg); }
+
+#game .actions button:not(:is(#invite,#puzzle-next)),
+#game #promotion button,
+dialog button:not(.brass) {
+  background: linear-gradient(145deg,#314c3c,#142c21 74%);
+  border: 1px solid #a98a52;
+  color: #fff0cc;
+  box-shadow: inset 0 0 0 1px #cea25820;
+}
+#game .actions #puzzle-next,
+#game:has(#feedback:not([hidden])) .actions #back {
+  background: linear-gradient(#ffe1a0,#d9aa57);
+  border: 1px solid #b49358;
+  color: #30230d;
+}

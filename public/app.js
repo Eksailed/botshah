@@ -115,7 +115,8 @@ async function show(next) {
   feedback.hidden = !next.task;
   feedback.classList.toggle('solved',next.solved === true);
   feedback.textContent = next.solved
-    ? (next.game === 'chess' ? '✓ Задача решена. Мат!' : '✓ Задача решена. Шашка взята!')
+    ? ('✓ Задача решена. '+({queen:'Ферзь взят!',crown:'Шашка стала дамкой!',chain:'Все шашки взяты!'}[next.series?.kind]
+      ?? (next.game === 'chess' ? 'Мат!' : 'Шашка взята!')))
     : next.solved === false ? 'Этот ход не решает задачу. Попробуйте другой.' : '';
   el('puzzle-retry').hidden = !next.solved;
   el('puzzle-next').hidden = !next.solved || !next.series || next.series.index+1 >= next.series.total;
@@ -317,6 +318,7 @@ function menuTab(id) {
   el('lobby').hidden = id !== 'play-tab';
   el('party-panel').hidden = id !== 'my-games';
   el('puzzle-panel').hidden = el('series-panel').hidden = id !== 'puzzle-tab';
+  if (id === 'puzzle-tab') loadTrainingArt();
 }
 async function refreshContinue() {
   try {
@@ -335,6 +337,11 @@ async function refreshContinue() {
 }
 el('play-tab').onclick = () => { if (!busy) menuTab('play-tab'); };
 el('puzzle-tab').onclick = () => { if (!busy) menuTab('puzzle-tab'); };
+el('training-toggle').onclick = () => {
+  const list = el('series-list');
+  list.hidden = !list.hidden;
+  el('training-toggle').setAttribute('aria-expanded',String(!list.hidden));
+};
 el('settings').onclick = () => {
   el('settings-dialog').showModal();
   void api('/preferences').then(({enabled}) => showPreference(enabled)).catch(() => {});
@@ -383,7 +390,7 @@ function scheduleComputer() {
 for (const button of document.querySelectorAll('[data-series]')) {
   const kind = button.dataset.series;
   button.onclick = () => perform(async () => show(await api('/puzzle',{
-    game:kind === 'mate' ? 'chess' : 'draughts',series:{kind,index:0}
+    game:button.dataset.gameKind,series:{kind,index:0}
   })));
 }
 el('puzzle-next').onclick = () => perform(async () => show(await api('/puzzle',{
@@ -539,3 +546,16 @@ function paintClubArt(canvas) {
 }
 clubArt.onload = () => document.querySelectorAll('[data-club-art]').forEach(paintClubArt);
 clubArt.src = '/club-art.png';
+
+let trainingArtStarted = false;
+function loadTrainingArt() {
+  if (trainingArtStarted) return;
+  trainingArtStarted = true;
+  const art = new Image();
+  art.onload = () => {
+    const canvas = el('training-art');
+    canvas.getContext('2d')?.drawImage(art,0,105,art.naturalWidth,528,0,0,canvas.width,canvas.height);
+  };
+  art.onerror = () => { trainingArtStarted = false; };
+  art.src = '/training-art.png';
+}

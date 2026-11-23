@@ -12,7 +12,9 @@ const draughtsTasks = [[42,35],[44,35],[40,33]];
 const seriesTasks = {
   mate:['7k/5K2/R7/8/8/8/8/8 w - - 0 1','k7/2K5/7R/8/8/8/8/8 w - - 0 1','8/8/8/8/8/r7/5k2/7K b - - 0 1'],
   chain:[[41,34,20],[46,37,19],[42,35,21]],
-  crown:[[17,10],[19,12],[21,14]]
+  crown:[[17,10],[19,12],[21,14]],
+  queen:['7k/q7/8/8/8/8/8/R6K w - - 0 1','7k/8/8/3q4/8/8/6B1/7K w - - 0 1','7k/8/8/2q5/8/3N4/8/7K w - - 0 1'],
+  kingCapture:[[56,35],[62,35],[49,35]]
 };
 export function puzzle(game, input, date = new Date(), series) {
   const day = Math.floor((date.getTime()+10800000)/86400000);
@@ -21,18 +23,18 @@ export function puzzle(game, input, date = new Date(), series) {
   const batch = kind && Object.hasOwn(seriesTasks,kind) ? seriesTasks[kind] : null;
   const index = series?.index ?? 0;
   const past = series?.history ?? [];
-  if (series && (!batch || (kind === 'mate') !== (game === 'chess') || !Number.isInteger(index) ||
+  if (series && (!batch || (['mate','queen'].includes(kind)) !== (game === 'chess') || !Number.isInteger(index) ||
     index < 0 || index >= batch.length || !Array.isArray(past) || past.length > 8)) fail(400,'Задача не найдена');
   let state, nextPosition, goal;
   if (game === 'chess') {
     const fen = batch?.[index] ?? chessTasks[day%chessTasks.length];
     state = position(game,[],fen);
     nextPosition = (_,move) => position(game,[move],fen);
-    goal = next => next.result === state.turn;
+    goal = kind === 'queen' ? next => !next.board.includes('bq') : next => next.result === state.turn;
   } else {
     const [from,...victims] = batch?.[index] ?? draughtsTasks[day%draughtsTasks.length];
     const board = Array(64).fill(null);
-    board[from] = 'wp';
+    board[from] = kind === 'kingCapture' ? 'wk' : 'wp';
     for (const victim of victims) board[victim] = 'bp';
     state = draughts({board,turn:'w',chain:null,taken:[]});
     for (const move of past) {
@@ -52,12 +54,13 @@ export function puzzle(game, input, date = new Date(), series) {
   const shown = advanced ? next : state;
   const history = continuing ? [...past,{from:move.from,to:move.to}] : past;
   const task = kind === 'chain' ? 'Возьмите все шашки за один ход' : kind === 'crown' ? 'Превратите шашку в дамку'
+    : kind === 'queen' ? 'Возьмите ферзя соперника' : kind === 'kingCapture' ? 'Возьмите шашку дамкой'
     : game === 'chess' ? 'Поставьте мат в один ход' : 'Возьмите шашку соперника';
   return {id:'puzzle',game,board:shown.board,taken:shown.taken,chain:shown.chain,
     side:state.turn,turn:shown.turn,ready:true,
     moves:solved ? [] : continuing ? draughts(shown).moves : state.moves,
     version:past.length+Number(advanced),lastMove:advanced ? move : null,
-    mateSquare:solved && game === 'chess' ? shown.board.indexOf(shown.turn+'k') : null,
+    mateSquare:solved && game === 'chess' && kind !== 'queen' ? shown.board.indexOf(shown.turn+'k') : null,
     series:batch ? {kind,index,total:batch.length,history} : null,
     task,solved:input && !continuing ? solved : null};
 }

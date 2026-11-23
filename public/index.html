@@ -30,11 +30,21 @@
       <button class="club-tile" data-puzzle="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Русские шашки<small>Задача дня</small></span></button>
       <button class="club-tile" data-puzzle="chess"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Шахматы<small>Задача дня</small></span></button>
     </div>
-    <div id="series-panel" class="actions" hidden>
-      <button data-series="mate">Мат в один</button>
-      <button data-series="chain">Серия взятий</button>
-      <button data-series="crown">Превращение в дамку</button>
-    </div>
+    <section id="series-panel" aria-labelledby="series-title" hidden>
+      <h2 id="series-title">
+        <button id="training-toggle" type="button" class="club-tile" aria-expanded="false" aria-controls="series-list">
+          <canvas id="training-art" width="768" height="264" aria-hidden="true"></canvas>
+          <span>Тренировки по темам<small>5 серий · 15 задач</small></span>
+        </button>
+      </h2>
+      <div id="series-list" class="series-grid" hidden>
+        <button class="club-tile" data-series="mate" data-game-kind="chess"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Мат в один<small>Шахматы · 3 задачи</small></span></button>
+        <button class="club-tile" data-series="queen" data-game-kind="chess"><canvas data-club-art="puzzle" width="250" height="120" aria-hidden="true"></canvas><span>Взятие ферзя<small>Шахматы · 3 задачи</small></span></button>
+        <button class="club-tile" data-series="chain" data-game-kind="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Серия взятий<small>Шашки · 3 задачи</small></span></button>
+        <button class="club-tile" data-series="crown" data-game-kind="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Превращение в дамку<small>Шашки · 3 задачи</small></span></button>
+        <button class="club-tile" data-series="kingCapture" data-game-kind="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Взятие дамкой<small>Шашки · 3 задачи</small></span></button>
+      </div>
+    </section>
     <nav class="club-nav" aria-label="Главное меню">
       <button id="play-tab" aria-pressed="true"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Играть</span></button>
       <button id="my-games" aria-pressed="false"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Партии</span></button>
