@@ -1,0 +1,25 @@
+{
+  "name": "botshah",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./public",
+    "run_worker_first": [
+      "/api/*",
+      "/telegram"
+    ]
+  },
+  "vars": {
+    "BOT_USERNAME": "DoskaBotshahBot"
+  },
+  "d1_databases": [
+    {
+      "database_name": "botshah",
+      "binding": "DB",
+      "database_id": "3b37801d-818d-4e0f-891b-570bf4657e76"
+    }
+  ]
+}

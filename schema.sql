@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS rooms (
+  id TEXT PRIMARY KEY,
+  game TEXT NOT NULL,
+  white INTEGER NOT NULL,
+  black INTEGER,
+  history TEXT NOT NULL DEFAULT '[]'
+);

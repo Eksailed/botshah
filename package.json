@@ -8,5 +8,8 @@
     "test": "node --test",
     "start": "node --env-file-if-exists=.env src/server.js"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "wrangler": "4.166.0"
+  }
 }
