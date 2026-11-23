@@ -60,7 +60,10 @@ async function animateMove(move, after) {
       const image = document.createElement('span');
       image.className = 'moving-piece'+(state.board[from][0] === 'w' ? ' white' : '');
       if (draughts) image.append(start.firstElementChild.cloneNode(true));
-      else image.textContent = start.textContent;
+      else {
+        image.classList.add('chess-piece');
+        image.textContent = start.textContent;
+      }
       Object.assign(image.style,{left:a.left+'px',top:a.top+'px',width:a.width+'px',height:a.height+'px'});
       image.setAttribute('aria-hidden','true');
       document.body.append(image);
@@ -207,7 +210,10 @@ function draw() {
     let description = coordinate;
     if (piece) {
       if (state.game === 'chess') {
-        button.textContent = symbols[piece[1]];
+        const figure = document.createElement('span');
+        figure.className = 'chess-piece';
+        figure.textContent = symbols[piece[1]];
+        button.append(figure);
         description += ', '+names[piece[1]];
       } else {
         const disc = document.createElement('span');

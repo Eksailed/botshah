@@ -292,3 +292,16 @@ main:has(#game:not([hidden])) #status:not(.match-status) { margin: 3px 0; min-he
 #game .actions { gap: 4px; }
 #game .actions button { padding: 5px 8px; min-height: 32px; font-size: 12px; }
 #game .actions #invite { flex: 1 1 auto; }
+
+.chess-piece {
+  color: #15100e;
+  -webkit-text-stroke: 1px #ffe0a7;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 2px #1a0e0ab3;
+}
+.white .chess-piece, .moving-piece.white.chess-piece {
+  color: #fff6db;
+  -webkit-text-stroke-color: #2d1a11;
+  text-shadow: 0 2px 2px #1a0e0acc;
+}
+.moving-source .chess-piece { visibility: hidden; }
