@@ -380,3 +380,27 @@ main:has(#party-panel:not([hidden]) .room-empty) {
   text-align: center;
   color: #e6d5ad;
 }
+
+#game #feedback {
+  min-height: 30px;
+  padding: 5px 8px;
+  color: #f1dbaf;
+  font-size: 13px;
+  text-align: center;
+}
+#feedback.solved {
+  background: linear-gradient(#ffe1a0,#d9aa57);
+  color: #2b210f !important;
+  border-radius: 7px;
+  font-weight: 750;
+  animation: puzzle-solved 230ms ease-out both;
+}
+#game .mate-square { box-shadow: inset 0 0 0 3px #ff9c78,inset 0 0 19px #681a13bb; }
+#game #puzzle-retry { border: 1px solid #a88a51; }
+@keyframes puzzle-solved {
+  from { opacity: .25; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #feedback.solved { animation: none; }
+}

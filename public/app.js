@@ -108,9 +108,14 @@ async function show(next) {
   clockReceived = performance.now();
   el('extras').hidden = true;
   el('settings').hidden = true;
-  el('feedback').hidden = !next.task || next.solved === null;
-  el('feedback').textContent = next.solved ? 'Задача решена!' : 'Попробуйте другой ход';
-  if (next.solved) state.moves = [];
+  const feedback = el('feedback');
+  feedback.hidden = !next.task;
+  feedback.classList.toggle('solved',next.solved === true);
+  feedback.textContent = next.solved
+    ? (next.game === 'chess' ? '✓ Задача решена. Мат!' : '✓ Задача решена. Шашка взята!')
+    : next.solved === false ? 'Этот ход не решает задачу. Попробуйте другой.' : '';
+  el('puzzle-retry').hidden = !next.solved;
+  el('back').textContent = next.task ? 'К задачам' : 'К выбору игры';
   if (!next.task) last = next.id;
   try { if (!next.task) localStorage.setItem('last-room',last); } catch {}
   const score = el('score');
@@ -203,6 +208,7 @@ function draw() {
     button.className = 'cell';
     if (((index >> 3)+index)%2) button.classList.add('dark');
     if (piece?.[0] === 'w') button.classList.add('white');
+    if (state.mateSquare === index) button.classList.add('mate-square');
     if (display.lastMove?.from === index || display.lastMove?.to === index) button.classList.add('last-move');
     if (selected === index) button.classList.add('selected');
     if (targets.has(index)) button.classList.add('target');
@@ -249,9 +255,15 @@ async function perform(action) {
 }
 
 function select(index) {
-  if (busy || review) return;
+  if (busy || review || state.solved) return;
   choice = state.moves.filter(m => m.from === selected && m.to === index);
   if (choice.length === 1) return send(choice[0]);
+  if (state.task && !choice.length && selected !== undefined && state.board[index]?.[0] !== state.side) {
+    el('feedback').textContent = state.game === 'draughts' && state.moves.some(move => move.victim !== undefined)
+      ? 'Взятие обязательно. Выберите подсвеченную клетку.' : 'Так ходить нельзя. Выберите подсвеченную клетку.';
+    return;
+  }
+  if (state.task && state.solved !== true) el('feedback').textContent = '';
   if (!choice.length) selected = state.moves.some(m => m.from === index) ? index : state.chain ?? undefined;
   draw();
 }
@@ -397,7 +409,13 @@ el('notifications').onclick = () => perform(async () => {
   showPreference((await api('/preferences',{enabled:!enabled})).enabled);
 });
 el('resume').onclick = () => perform(async () => show(await api('/'+continueId)));
-el('back').onclick = () => { if (!busy) lobby(); };
+el('puzzle-retry').onclick = () => perform(async () => show(await api('/puzzle',{game:state.game})));
+el('back').onclick = () => {
+  if (busy) return;
+  const fromPuzzle = Boolean(state?.task);
+  lobby();
+  if (fromPuzzle) menuTab('puzzle-tab');
+};
 el('invite').onclick = () => {
   const url = 'https://t.me/share/url?url='+encodeURIComponent(state.invite);
   tg.openTelegramLink(url);
