@@ -457,3 +457,25 @@ main:has(#party-panel:not([hidden]) .room-empty) {
 }
 
 dialog { max-height: calc(100dvh - 22px); overflow-y: auto; }
+
+#party-panel:has(.room-empty) {
+  grid-template-rows: auto minmax(0,1fr);
+}
+#party-panel .archive-tabs {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  align-items: center;
+  gap: 6px;
+}
+#extras .archive-tabs button {
+  min-height: 44px;
+  padding: 7px 5px;
+  border-color: #927441;
+  background: linear-gradient(#2d493b,#193127);
+  color: #fff0cc;
+  font-weight: 650;
+}
+#extras .archive-tabs button[aria-pressed="true"] {
+  background: linear-gradient(#ffe1a0,#d9aa57);
+  color: #30230d;
+}
