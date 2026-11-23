@@ -39,3 +39,19 @@ button:focus-visible { outline: 3px solid #ffda68; outline-offset: -3px; }
   font-weight: 700;
 }
 #board { border: 1px solid #3c5146; }
+
+.last-move { box-shadow: inset 0 0 0 3px #e9c45c99; }
+.last-move.selected { box-shadow: inset 0 0 0 3px #ffda68; }
+.crowned { box-shadow: inset 0 0 0 2px #ad915b, 0 2px 3px #151c1966; }
+.moving-piece {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  font: clamp(20px,8vw,47px) 'Segoe UI Symbol',serif;
+  color: #182221;
+}
+.moving-piece.white { color: #fff7dd; }
+.moving-source { color: transparent; text-shadow: none; }
+.moving-source .disc { visibility: hidden; }

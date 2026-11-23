@@ -22,12 +22,15 @@ export function position(game, history, fen) {
     seen.set(key,times);
     return times;
   };
+  const replay = [];
   let repetitions = count();
   for (const move of history) {
     state = step(state, move);
+    replay.push({move,board:state.board,taken:state.taken});
+    if (replay.length > 12) replay.shift();
     repetitions = count();
   }
-  const current = draughts(state);
+  const current = {...draughts(state),replay};
   if (!current.result && (repetitions >= 3 || state.quiet >= 30)) {
     return {...current,result:'draw',moves:[]};
   }

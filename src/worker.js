@@ -90,7 +90,7 @@ async function room(request, env, path) {
       "FROM rooms WHERE result IS NOT NULL AND ((white = ?1 AND black = ?2) OR (white = ?2 AND black = ?1))"
     ).bind(user,opponent).first();
   }
-  return Response.json({...state,id,game:row.game,side,ready,score,version:history.length,
+  return Response.json({...state,id,game:row.game,side,ready,score,lastMove:history.at(-1) ?? null,version:history.length,
     moves:ready && state.turn === side ? state.moves : [],
     invite:'https://t.me/'+env.BOT_USERNAME+'?startapp='+id},{headers:{'Cache-Control':'no-store'}});
 }
