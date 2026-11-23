@@ -43,7 +43,70 @@ function lobby() {
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const cell = index => el('board').children[state.side === 'b' ? 63-index : index];
 
-async function animateMove(move, after) {
+const moveSound = el('move-sound');
+const moveVibration = el('move-vibration');
+for (const control of [moveSound,moveVibration]) {
+  control.checked = true;
+  try { control.checked = localStorage.getItem(control.id) !== 'off'; } catch {}
+  control.addEventListener('change',() => {
+    try { localStorage.setItem(control.id,control.checked ? 'on' : 'off'); } catch {}
+  });
+}
+let moveAudio;
+function unlockMoveAudio() {
+  if (!moveSound.checked) return;
+  try {
+    const Context = window.AudioContext ?? window.webkitAudioContext;
+    if (!Context) return;
+    moveAudio ??= new Context();
+    if (moveAudio.state !== 'running') void moveAudio.resume().catch(() => {});
+  } catch {}
+}
+document.addEventListener('pointerdown',unlockMoveAudio,{passive:true});
+document.addEventListener('keydown',unlockMoveAudio);
+moveSound.addEventListener('change',unlockMoveAudio);
+
+function moveEffects(before,move,after) {
+  const piece = before.board[move.from];
+  if (!piece) return {};
+  const capture = move.from === move.to || before.board.some((old,i) => old && old[0] !== piece[0] &&
+    !before.taken?.includes(i) && (after.board[i] !== old || after.taken?.includes(i)));
+  const crowned = before.game === 'draughts' && move.from !== move.to &&
+    piece[1] === 'p' && after.board[move.to] === piece[0]+'k';
+  return {capture,crowned};
+}
+function playMoveEffects({capture,crowned}) {
+  if (document.hidden || tg?.isActive === false) return;
+  if (moveSound.checked && moveAudio?.state === 'running') {
+    const start = moveAudio.currentTime;
+    const taps = capture ? [[225,0,.095],[510,.034,.065]] : [[370,0,.068]];
+    for (const [frequency,offset,volume] of taps) {
+      const time = start+offset;
+      const tone = moveAudio.createOscillator();
+      const gain = moveAudio.createGain();
+      tone.type = 'triangle';
+      tone.frequency.setValueAtTime(frequency,time);
+      tone.frequency.exponentialRampToValueAtTime(frequency*.62,time+.032);
+      gain.gain.setValueAtTime(.001,time);
+      gain.gain.exponentialRampToValueAtTime(volume,time+.003);
+      gain.gain.exponentialRampToValueAtTime(.001,time+.055);
+      tone.connect(gain).connect(moveAudio.destination);
+      tone.start(time);
+      tone.stop(time+.06);
+    }
+  }
+  if (crowned && moveVibration.checked) {
+    try {
+      if (tg?.HapticFeedback?.notificationOccurred && tg.isVersionAtLeast?.('6.1') !== false) {
+        tg.HapticFeedback.notificationOccurred('success');
+      } else {
+        navigator.vibrate?.(35);
+      }
+    } catch {}
+  }
+}
+
+async function animateMove(move, capture) {
   const piece = state.board[move.from];
   const source = cell(move.from);
   if (move.from === move.to || !piece || !source || typeof source.animate !== 'function') return;
@@ -54,8 +117,7 @@ async function animateMove(move, after) {
     const kingSide = move.to > move.from;
     lines.push([kingSide ? move.from+3 : move.from-4, kingSide ? move.from+1 : move.from-1]);
   }
-  const jump = draughts && state.board.some((old,i) => old?.[0] !== piece[0] && old &&
-    !state.taken?.includes(i) && (!after.board[i] || after.taken?.includes(i)));
+  const jump = draughts && capture;
   const overlays = [];
   try {
     const animations = lines.map(([from,to]) => {
@@ -92,11 +154,13 @@ async function animateMove(move, after) {
 
 async function show(next) {
   const delta = next.version-state?.version;
-  if (state?.id === next.id && delta > 0 && !reducedMotion.matches && !document.hidden) {
+  if (state?.id === next.id && delta > 0 && !document.hidden) {
     const frames = next.game === 'draughts' && next.replay?.length >= delta ? next.replay.slice(-delta)
       : delta === 1 && next.lastMove ? [{...next,move:next.lastMove}] : [];
     for (const [index,frame] of frames.entries()) {
-      await animateMove(frame.move,frame);
+      const effects = moveEffects(state,frame.move,frame);
+      if (!reducedMotion.matches) await animateMove(frame.move,effects.capture);
+      playMoveEffects(effects);
       if (index+1 < frames.length) {
         state = {...state,board:frame.board,taken:frame.taken,lastMove:frame.move,moves:[]};
         selected = undefined;

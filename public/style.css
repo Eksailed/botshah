@@ -556,3 +556,24 @@ dialog button:not(.brass) {
   color: #ffe1a0;
   font-size: 13px;
 }
+
+.feedback-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 7px 11px;
+  border: 1px solid #927441;
+  border-radius: 8px;
+  background: linear-gradient(145deg,#314c3c,#142c21 74%);
+  color: #fff0cc;
+  cursor: pointer;
+}
+.feedback-setting input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 18px;
+  accent-color: #efd18b;
+}
