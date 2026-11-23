@@ -5,7 +5,7 @@ const symbols = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 const names = {k:'король',q:'ферзь',r:'ладья',b:'слон',n:'конь',p:'пешка'};
 const roomId = /^[a-f0-9]{24}$/;
 let state, selected, busy = false, choice = [];
-let last;
+let last, review, clockReceived;
 
 async function api(path,body) {
   const response = await fetch('/api/rooms'+path,{
@@ -20,7 +20,9 @@ async function api(path,body) {
 }
 
 function lobby() {
-  state = selected = undefined;
+  state = selected = review = undefined;
+  el('extras').hidden = false;
+  el('room-list').replaceChildren();
   choice = [];
   el('title').textContent = 'Доска';
   el('status').textContent = 'Выберите игру';
@@ -94,9 +96,15 @@ async function show(next) {
     selected = next.chain ?? undefined;
     choice = [];
   }
+  if (state?.id !== next.id) review = undefined;
   state = next;
-  last = next.id;
-  try { localStorage.setItem('last-room',last); } catch {}
+  clockReceived = performance.now();
+  el('extras').hidden = true;
+  el('feedback').hidden = !next.task || next.solved === null;
+  el('feedback').textContent = next.solved ? 'Задача решена!' : 'Попробуйте другой ход';
+  if (next.solved) state.moves = [];
+  if (!next.task) last = next.id;
+  try { if (!next.task) localStorage.setItem('last-room',last); } catch {}
   const score = el('score');
   score.hidden = !state.score;
   if (state.score) {
@@ -109,20 +117,59 @@ async function show(next) {
   const color = state.side === 'w' ? 'белыми' : 'чёрными';
   const turn = state.turn === state.side ? 'Ваш ход' : 'Ход соперника';
   const result = state.result === 'draw' ? 'Ничья' : state.result === state.side ? 'Вы выиграли' : 'Соперник выиграл';
-  el('status').textContent = state.result ? result : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника');
+  el('status').textContent = state.task ?? (state.result ? result : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника'));
+  actions();
+  draw();
+}
+
+function actions() {
+  const rematch = el('rematch');
+  rematch.hidden = !state.result || !state.ready || Boolean(review);
+  rematch.disabled = state.offer === 'sent' && !state.rematch;
+  rematch.textContent = state.rematch ? 'Открыть реванш' : state.offer === 'received'
+    ? 'Принять реванш' : state.offer === 'sent' ? 'Реванш предложен' : 'Реванш';
+  el('invite').hidden = Boolean(state.task || review);
+  el('review').hidden = !state.result || !state.version || Boolean(review);
+  el('review-controls').hidden = !review;
+  drawClocks();
+}
+
+function drawClocks() {
+  const clock = state?.clock;
+  const view = el('clocks');
+  view.hidden = !clock || clock.mode === 'none' || Boolean(review);
+  if (view.hidden) return;
+  const elapsed = !state.result && clock.started !== null
+    ? Math.max(0,clock.now-clock.started+performance.now()-clockReceived) : 0;
+  const format = side => {
+    const seconds = Math.ceil(Math.max(0,clock[side]-(state.turn === side ? elapsed : 0))/1000);
+    const hours = Math.floor(seconds/3600);
+    return (hours ? hours+' ч ' : '')+Math.floor(seconds%3600/60)+':'+String(seconds%60).padStart(2,'0');
+  };
+  view.textContent = 'Белые '+format('w')+' · Чёрные '+format('b');
+}
+
+async function showReview(ply) {
+  review = {...await api('/'+state.id+'/review',{ply}),ply};
+  selected = undefined;
+  el('ply').textContent = ply+' / '+state.version;
+  el('prev-ply').disabled = ply === 0;
+  el('next-ply').disabled = ply === state.version;
+  actions();
   draw();
 }
 
 function draw() {
+  const display = review ?? state;
   const targets = new Set(state.moves.filter(m => m.from === selected).map(m => m.to));
   const squares = Array.from({length:64},(_,i) => {
     const index = state.side === 'b' ? 63-i : i;
-    const piece = state.taken?.includes(index) ? null : state.board[index];
+    const piece = display.taken?.includes(index) ? null : display.board[index];
     const button = document.createElement('button');
     button.className = 'cell';
     if (((index >> 3)+index)%2) button.classList.add('dark');
     if (piece?.[0] === 'w') button.classList.add('white');
-    if (state.lastMove?.from === index || state.lastMove?.to === index) button.classList.add('last-move');
+    if (display.lastMove?.from === index || display.lastMove?.to === index) button.classList.add('last-move');
     if (selected === index) button.classList.add('selected');
     if (targets.has(index)) button.classList.add('target');
     const coordinate = 'abcdefgh'[index%8]+(8-(index>>3));
@@ -165,7 +212,7 @@ async function perform(action) {
 }
 
 function select(index) {
-  if (busy) return;
+  if (busy || review) return;
   choice = state.moves.filter(m => m.from === selected && m.to === index);
   if (choice.length === 1) return send(choice[0]);
   if (!choice.length) selected = state.moves.some(m => m.from === index) ? index : state.chain ?? undefined;
@@ -174,6 +221,12 @@ function select(index) {
 
 function send(move) {
   return perform(async () => {
+    if (state.task) {
+      selected = undefined;
+      choice = [];
+      await show(await api('/puzzle',{game:state.game,move}));
+      return;
+    }
     const path = '/'+state.id;
     try { await show(await api(path+'/move',{...move,version:state.version})); }
     catch (error) {
@@ -184,8 +237,47 @@ function send(move) {
 }
 
 for (const button of document.querySelectorAll('[data-game]')) {
-  button.onclick = () => perform(async () => show(await api('',{game:button.dataset.game})));
+  button.onclick = () => perform(async () => show(await api('',{game:button.dataset.game,clock:el('clock-mode').value})));
 }
+for (const button of document.querySelectorAll('[data-puzzle]')) {
+  button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));
+}
+el('my-games').onclick = () => perform(async () => {
+  const {rooms} = await api('');
+  const list = el('room-list');
+  list.replaceChildren();
+  if (!rooms.length) list.textContent = 'Активных партий пока нет';
+  for (const room of rooms) {
+    const button = document.createElement('button');
+    button.textContent = labels[room.game]+' · '+(!room.ready ? 'Ждём соперника' : room.yourTurn ? 'Ваш ход' : 'Ход соперника');
+    button.onclick = () => perform(async () => show(await api('/'+room.id)));
+    list.append(button);
+  }
+});
+el('rematch').onclick = () => perform(async () => {
+  const next = state.rematch ? state : await api('/'+state.id+'/rematch',{});
+  await show(next.rematch ? await api('/'+next.rematch) : next);
+});
+el('review').onclick = () => perform(() => showReview(0));
+el('prev-ply').onclick = () => perform(() => showReview(review.ply-1));
+el('next-ply').onclick = () => perform(() => showReview(review.ply+1));
+el('exit-review').onclick = () => {
+  if (busy) return;
+  review = undefined;
+  actions();
+  draw();
+};
+function showPreference(enabled) {
+  el('notifications').textContent = enabled ? 'Выключить уведомления о ходе' : 'Включить уведомления о ходе';
+}
+el('notifications').onclick = () => perform(async () => {
+  const {enabled} = await api('/preferences');
+  if (!enabled && tg.requestWriteAccess) {
+    const allowed = await new Promise(resolve => tg.requestWriteAccess(resolve));
+    if (!allowed) return;
+  }
+  showPreference((await api('/preferences',{enabled:!enabled})).enabled);
+});
 el('resume').onclick = () => perform(async () => show(await api('/'+last)));
 el('back').onclick = () => { if (!busy) lobby(); };
 el('invite').onclick = () => {
@@ -206,11 +298,12 @@ if (!tg?.initData) {
   else if (invite === 'chess' || invite === 'draughts') {
     perform(async () => show(await api('',{game:invite})));
   }
+  setInterval(drawClocks,250);
   setInterval(() => {
-    if (state && !state.result && !document.hidden) {
+    if (state && !state.task && !review && !document.hidden && (!state.result || !state.rematch)) {
       perform(async () => {
         const next = await api('/'+state.id);
-        if (next.version !== state.version || next.ready !== state.ready || JSON.stringify(next.score) !== JSON.stringify(state.score)) await show(next);
+        if (next.version !== state.version || next.ready !== state.ready || next.result !== state.result || next.offer !== state.offer || next.rematch !== state.rematch || JSON.stringify(next.score) !== JSON.stringify(state.score)) await show(next);
       });
     }
   },2000);

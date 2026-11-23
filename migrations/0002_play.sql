@@ -1,0 +1,11 @@
+ALTER TABLE rooms ADD COLUMN clock TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE rooms ADD COLUMN white_ms INTEGER;
+ALTER TABLE rooms ADD COLUMN black_ms INTEGER;
+ALTER TABLE rooms ADD COLUMN started_ms INTEGER;
+ALTER TABLE rooms ADD COLUMN turn TEXT;
+ALTER TABLE rooms ADD COLUMN offer INTEGER;
+ALTER TABLE rooms ADD COLUMN previous TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS rooms_rematch ON rooms(previous);
+CREATE INDEX IF NOT EXISTS rooms_by_white ON rooms(white);
+CREATE INDEX IF NOT EXISTS rooms_by_black ON rooms(black);
+CREATE TABLE IF NOT EXISTS notifications (user_id INTEGER PRIMARY KEY);

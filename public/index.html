@@ -11,16 +11,34 @@
   <p id="status" role="status"></p>
   <section id="lobby" hidden>
     <div class="lobby-board" aria-hidden="true"><span class="white"><span class="disc">♛</span></span></div>
+    <label>Контроль времени
+      <select id="clock-mode"><option value="none">Без часов</option><option value="rapid">5 мин + 3 с за ход</option><option value="daily">1 день на ход</option></select>
+    </label>
     <button data-game="draughts">● Русские шашки</button>
     <button data-game="chess">♞ Шахматы</button>
     <button id="resume" hidden>Продолжить партию</button>
   </section>
+  <section id="extras" hidden class="actions">
+    <button id="my-games">Мои партии</button>
+    <button data-puzzle="draughts">Задача дня: шашки</button>
+    <button data-puzzle="chess">Задача дня: шахматы</button>
+    <button id="notifications">Уведомления о ходе</button>
+    <div id="room-list"></div>
+  </section>
   <section id="game" hidden>
+    <p id="clocks" hidden></p>
+    <div id="review-controls" class="actions" hidden>
+      <button id="prev-ply">← Назад</button><span id="ply"></span>
+      <button id="next-ply">Вперёд →</button><button id="exit-review">К результату</button>
+    </div>
+    <p id="feedback" role="status" hidden></p>
     <p id="score" hidden></p>
     <div id="board" aria-label="Игровая доска"></div>
     <div id="promotion" hidden aria-label="Выбор фигуры"></div>
     <div class="actions">
       <button id="invite">Пригласить друга</button>
+      <button id="rematch" hidden>Реванш</button>
+      <button id="review" hidden>Посмотреть ходы</button>
       <button id="back">К выбору игры</button>
     </div>
   </section>

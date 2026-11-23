@@ -55,3 +55,15 @@ button:focus-visible { outline: 3px solid #ffda68; outline-offset: -3px; }
 .moving-piece.white { color: #fff7dd; }
 .moving-source { color: transparent; text-shadow: none; }
 .moving-source .disc { visibility: hidden; }
+
+#clock-mode, #extras button {
+  padding: 10px;
+  color: #fff4d9;
+  background: #2c4840;
+  border: 1px solid #587063;
+  border-radius: 8px;
+  font: inherit;
+}
+#room-list { display: grid; gap: 8px; width: 100%; }
+#clocks, #ply { font-variant-numeric: tabular-nums; }
+button:disabled { opacity: .65; cursor: default; }
