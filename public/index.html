@@ -21,13 +21,13 @@
   <section id="extras" hidden>
     <div id="party-panel" hidden><div id="room-list"></div></div>
     <div id="puzzle-panel" hidden class="actions">
-      <button data-puzzle="draughts">Задача дня: шашки</button>
-      <button data-puzzle="chess">Задача дня: шахматы</button>
+      <button class="club-tile" data-puzzle="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Русские шашки<small>Задача дня</small></span></button>
+      <button class="club-tile" data-puzzle="chess"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Шахматы<small>Задача дня</small></span></button>
     </div>
     <nav class="club-nav" aria-label="Главное меню">
-      <button id="play-tab" aria-pressed="true">Играть</button>
-      <button id="my-games" aria-pressed="false">Партии</button>
-      <button id="puzzle-tab" aria-pressed="false">Задачи</button>
+      <button id="play-tab" aria-pressed="true"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Играть</span></button>
+      <button id="my-games" aria-pressed="false"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Партии</span></button>
+      <button id="puzzle-tab" aria-pressed="false"><canvas data-club-art="puzzle" width="250" height="120" aria-hidden="true"></canvas><span>Задачи</span></button>
     </nav>
   </section>
   <dialog id="setup">

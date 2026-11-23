@@ -294,7 +294,20 @@ el('my-games').onclick = () => perform(async () => {
   if (!rooms.length) list.textContent = 'Активных партий пока нет';
   for (const room of rooms) {
     const button = document.createElement('button');
-    button.textContent = labels[room.game]+' · '+(!room.ready ? 'Ждём соперника' : room.yourTurn ? 'Ваш ход' : 'Ход соперника');
+    button.className = 'club-tile';
+    const art = document.createElement('canvas');
+    art.width = 250;
+    art.height = 120;
+    art.dataset.clubArt = room.game;
+    art.setAttribute('aria-hidden','true');
+    const title = document.createElement('span');
+    title.textContent = labels[room.game];
+    const status = document.createElement('small');
+    status.textContent = !room.ready ? 'Ждём соперника' : room.yourTurn ? 'Ваш ход' : 'Ход соперника';
+    if (room.ready && room.yourTurn) button.classList.add('your-turn');
+    title.append(status);
+    button.append(art,title);
+    paintClubArt(art);
     button.onclick = () => perform(async () => show(await api('/'+room.id)));
     list.append(button);
   }
@@ -355,10 +368,10 @@ if (!tg?.initData) {
 }
 
 const clubArt = new Image();
-clubArt.onload = () => {
-  const crops = {hero:[0,79,499,232],draughts:[244,501,250,120],chess:[244,648,250,120]};
-  for (const canvas of document.querySelectorAll('[data-club-art]')) {
-    canvas.getContext('2d')?.drawImage(clubArt,...crops[canvas.dataset.clubArt],0,0,canvas.width,canvas.height);
-  }
-};
+const crops = {hero:[0,79,499,232],draughts:[244,501,250,120],chess:[244,648,250,120],puzzle:[244,790,250,120]};
+function paintClubArt(canvas) {
+  if (!clubArt.complete || !clubArt.naturalWidth) return;
+  canvas.getContext('2d')?.drawImage(clubArt,...crops[canvas.dataset.clubArt],0,0,canvas.width,canvas.height);
+}
+clubArt.onload = () => document.querySelectorAll('[data-club-art]').forEach(paintClubArt);
 clubArt.src = '/club-art.png';
