@@ -243,3 +243,32 @@ main:has(#game:not([hidden])) #status { margin: 8px 0; }
 #game .disc.crowned { outline: 1px solid #f4d88f; }
 #game .actions { margin-top: 0; }
 #game .actions #invite { flex-basis: 100%; background: linear-gradient(#ffe1a0,#d9aa57); }
+
+/* Высота доски ограничена свободным местом между панелями. */
+body:has(#game:not([hidden])) { overflow: hidden; }
+main:has(#game:not([hidden])) {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+main:has(#game:not([hidden])) #error { margin: 4px 0 0; }
+main:has(#game:not([hidden])) #error:empty { display: none; }
+#game:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#game > :not(.board-space) { flex-shrink: 0; }
+.board-space { flex: 1; min-height: 0; container-type: size; }
+.board-frame {
+  width: min(100%,max(15px,calc(100cqh - 2px)));
+  margin-inline: auto;
+}
+#game .cell { font-size: clamp(10px, min(10cqi,10cqh), 47px); }
+@media (max-height: 550px) {
+  main:has(#game:not([hidden])) { padding-block: 6px; }
+  main:has(#game:not([hidden])) h1 { font-size: clamp(19px,5vw,27px); }
+  main:has(#game:not([hidden])) #status { margin: 3px 0; min-height: 0; }
+  #game:not([hidden]) { gap: 4px; margin-top: 4px; }
+  .player-panel { min-height: 32px; padding-block: 3px; }
+  #game .actions button { padding-block: 6px; }
+  .board-files { padding-top: 1px; }
+}
