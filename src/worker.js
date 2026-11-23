@@ -75,7 +75,22 @@ async function room(request, env, path, ctx) {
     const enabled = Boolean(await db.prepare('SELECT 1 FROM notifications WHERE user_id = ?').bind(user).first());
     return Response.json({enabled},{headers:{'Cache-Control':'no-store'}});
   }
-  if (path === '/api/rooms/puzzle' && post) return Response.json(puzzle(input.game,input.move,undefined,input.series));
+  if (path === '/api/rooms/progress' && request.method === 'GET') {
+    const {results} = await db.prepare('SELECT topic,task_index FROM training_progress WHERE user_id = ? ORDER BY task_index')
+      .bind(user).all();
+    const progress = Object.create(null);
+    for (const {topic,task_index} of results) (progress[topic] ??= []).push(task_index);
+    return Response.json({progress},{headers:{'Cache-Control':'no-store'}});
+  }
+  if (path === '/api/rooms/puzzle' && post) {
+    const level = input.hint === 1 || input.hint === 2 ? input.hint : 0;
+    const task = puzzle(input.game,level ? null : input.move,undefined,input.series,level);
+    if (task.solved && task.series) {
+      await db.prepare('INSERT OR IGNORE INTO training_progress (user_id,topic,task_index,solved_at) VALUES (?,?,?,?)')
+        .bind(user,task.series.kind,task.series.index,Date.now()).run();
+    }
+    return Response.json(task,{headers:{'Cache-Control':'no-store'}});
+  }
   if (path === '/api/rooms' && request.method === 'GET') {
     const {results} = await db.prepare(
       "SELECT id,game,black IS NOT NULL AS ready, history != '[]' AS started, training, white = ?1 AS isWhite, turn, CASE WHEN turn IS NULL THEN history END AS legacy "+

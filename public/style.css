@@ -524,3 +524,15 @@ dialog button:not(.brass) {
   border: 1px solid #b49358;
   color: #30230d;
 }
+
+#game .hint-source { box-shadow: inset 0 0 0 3px #ffdf8a,inset 0 0 15px #f5aa4f66; }
+#game .hint-destination::after {
+  content: '';
+  position: absolute;
+  width: 33%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid #573616;
+  background: #ffda68;
+  box-shadow: 0 0 0 2px #fff0b9;
+}

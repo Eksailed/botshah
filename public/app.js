@@ -5,7 +5,9 @@ const symbols = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 const names = {k:'король',q:'ферзь',r:'ладья',b:'слон',n:'конь',p:'пешка'};
 const roomId = /^[a-f0-9]{24}$/;
 let state, selected, busy = false, choice = [];
-let last, review, clockReceived, setupGame, continueId, computerTimer;
+let last, review, clockReceived, setupGame, continueId, computerTimer, puzzleHint, hintLevel = 0;
+const trainingTotal = 3;
+let trainingProgress = {};
 const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',resign:'Сдача',timeout:'Время вышло',
   agreement:'По согласию',rules:'По правилам игры'};
 
@@ -108,6 +110,15 @@ async function show(next) {
   }
   if (state?.id !== next.id) review = undefined;
   state = next;
+  puzzleHint = undefined;
+  hintLevel = 0;
+  el('puzzle-hint').hidden = !next.task || Boolean(next.solved);
+  el('puzzle-hint').textContent = 'Подсказка';
+  el('puzzle-hint').disabled = false;
+  if (next.solved && next.series) {
+    const {kind,index} = next.series;
+    trainingProgress[kind] = [...new Set([...(trainingProgress[kind] ?? []),index])];
+  }
   clockReceived = performance.now();
   el('extras').hidden = true;
   el('settings').hidden = true;
@@ -119,8 +130,9 @@ async function show(next) {
       ?? (next.game === 'chess' ? 'Мат!' : 'Шашка взята!')))
     : next.solved === false ? 'Этот ход не решает задачу. Попробуйте другой.' : '';
   el('puzzle-retry').hidden = !next.solved;
-  el('puzzle-next').hidden = !next.solved || !next.series || next.series.index+1 >= next.series.total;
-  if (next.solved && next.series && next.series.index+1 === next.series.total) {
+  const nextIndex = next.series ? unsolvedIndex(next.series,next.series.index+1) : -1;
+  el('puzzle-next').hidden = !next.solved || nextIndex < 0;
+  if (next.solved && next.series && nextIndex < 0) {
     feedback.textContent = '✓ Серия завершена ('+next.series.total+' из '+next.series.total+')';
   }
   el('back').textContent = next.task ? 'К задачам' : 'К выбору игры';
@@ -228,6 +240,8 @@ function draw() {
     button.className = 'cell';
     if (((index >> 3)+index)%2) button.classList.add('dark');
     if (piece?.[0] === 'w') button.classList.add('white');
+    if (puzzleHint?.from === index) button.classList.add('hint-source');
+    if (puzzleHint?.to === index) button.classList.add('hint-destination');
     if (state.mateSquare === index) button.classList.add('mate-square');
     if (display.lastMove?.from === index || display.lastMove?.to === index) button.classList.add('last-move');
     if (!review && state.huff?.includes(index) && state.side === state.turn) button.classList.add('huff-target');
@@ -318,7 +332,10 @@ function menuTab(id) {
   el('lobby').hidden = id !== 'play-tab';
   el('party-panel').hidden = id !== 'my-games';
   el('puzzle-panel').hidden = el('series-panel').hidden = id !== 'puzzle-tab';
-  if (id === 'puzzle-tab') loadTrainingArt();
+  if (id === 'puzzle-tab') {
+    loadTrainingArt();
+    void refreshTrainingProgress().catch(() => {});
+  }
 }
 async function refreshContinue() {
   try {
@@ -387,15 +404,51 @@ function scheduleComputer() {
     });
   },250);
 }
+function unsolvedIndex({kind,total},start = 0) {
+  const done = trainingProgress[kind] ?? [];
+  for (let i=0; i<total; i++) {
+    const index = (start+i)%total;
+    if (!done.includes(index)) return index;
+  }
+  return -1;
+}
+async function refreshTrainingProgress() {
+  const {progress} = await api('/progress');
+  for (const [kind,indices] of Object.entries(progress)) {
+    trainingProgress[kind] = [...new Set([...(trainingProgress[kind] ?? []),...indices])];
+  }
+  for (const button of document.querySelectorAll('[data-series]')) {
+    const count = trainingProgress[button.dataset.series]?.length ?? 0;
+    const category = labels[button.dataset.gameKind];
+    button.querySelector('small').textContent = category+' · '+count+' из '+trainingTotal+' решено';
+  }
+}
 for (const button of document.querySelectorAll('[data-series]')) {
   const kind = button.dataset.series;
-  button.onclick = () => perform(async () => show(await api('/puzzle',{
-    game:button.dataset.gameKind,series:{kind,index:0}
-  })));
+  button.onclick = () => perform(async () => {
+    await refreshTrainingProgress();
+    const index = unsolvedIndex({kind,total:trainingTotal});
+    await show(await api('/puzzle',{game:button.dataset.gameKind,series:{kind,index:Math.max(0,index)}}));
+  });
 }
-el('puzzle-next').onclick = () => perform(async () => show(await api('/puzzle',{
-  game:state.game,series:{kind:state.series.kind,index:state.series.index+1}
-})));
+el('puzzle-next').onclick = () => perform(async () => {
+  const index = unsolvedIndex(state.series,state.series.index+1);
+  if (index >= 0) await show(await api('/puzzle',{game:state.game,series:{kind:state.series.kind,index}}));
+});
+el('puzzle-hint').onclick = () => perform(async () => {
+  if (!state?.task || state.solved || hintLevel >= 2) return;
+  const level = hintLevel+1;
+  const {hint} = await api('/puzzle',{game:state.game,series:state.series,hint:level});
+  if (!hint) return;
+  hintLevel = level;
+  puzzleHint = hint;
+  selected = undefined;
+  choice = [];
+  el('feedback').textContent = hint.text;
+  el('puzzle-hint').textContent = level === 1 ? 'Показать ход' : 'Ход показан';
+  el('puzzle-hint').disabled = level === 2;
+  draw();
+});
 el('draw-offer').onclick = () => perform(async () => show(await api('/'+state.id+'/draw',{
   intent:state.drawOffer === 'received' ? 'accept' : 'offer'
 })));

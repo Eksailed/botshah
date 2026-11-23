@@ -16,7 +16,7 @@ const seriesTasks = {
   queen:['7k/q7/8/8/8/8/8/R6K w - - 0 1','7k/8/8/3q4/8/8/6B1/7K w - - 0 1','7k/8/8/2q5/8/3N4/8/7K w - - 0 1'],
   kingCapture:[[56,35],[62,35],[49,35]]
 };
-export function puzzle(game, input, date = new Date(), series) {
+export function puzzle(game, input, date = new Date(), series, hintLevel = 0) {
   const day = Math.floor((date.getTime()+10800000)/86400000);
   if (game !== 'chess' && game !== 'draughts') fail(400,'Выберите игру');
   const kind = series?.kind;
@@ -46,6 +46,23 @@ export function puzzle(game, input, date = new Date(), series) {
     nextPosition = (current,move) => step(current,move);
     goal = next => next.chain === null && (kind === 'crown' ? next.board.includes('wk') : !next.board.includes('bp'));
   }
+  const findSolution = current => {
+    for (const candidate of current.moves) {
+      const after = nextPosition(current,candidate);
+      if (goal(after) || (game === 'draughts' && after.chain !== null && findSolution(draughts(after)))) return candidate;
+    }
+    return null;
+  };
+  const suggestion = hintLevel ? findSolution(state) : null;
+  const hint = suggestion ? {
+    from:suggestion.from,
+    ...(hintLevel === 2 ? {to:suggestion.to} : {}),
+    text:hintLevel === 1 ? 'Начните выделенной фигурой.' : kind === 'queen' ? 'Ход на выделенную клетку берёт ферзя.'
+      : game === 'chess' ? 'Этот ход ставит мат.' : kind === 'crown' ? 'Взятие выводит шашку на последнюю линию — она станет дамкой.'
+      : kind === 'chain' ? 'После этого прыжка проверьте, можно ли продолжить взятие той же шашкой.'
+      : kind === 'kingCapture' ? 'Дамка перепрыгивает через шашку и приземляется за ней.'
+      : 'Перепрыгните через шашку соперника на выделенную клетку.'
+  } : null;
   const move = state.moves.find(m => m.from === input?.from && m.to === input?.to && m.promotion === input?.promotion);
   const next = move ? nextPosition(state,move) : null;
   const solved = Boolean(next && goal(next));
@@ -62,7 +79,7 @@ export function puzzle(game, input, date = new Date(), series) {
     version:past.length+Number(advanced),lastMove:advanced ? move : null,
     mateSquare:solved && game === 'chess' && kind !== 'queen' ? shown.board.indexOf(shown.turn+'k') : null,
     series:batch ? {kind,index,total:batch.length,history} : null,
-    task,solved:input && !continuing ? solved : null};
+    task,hint,solved:input && !continuing ? solved : null};
 }
 
 export async function notifyTurn(env, user, id) {
