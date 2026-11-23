@@ -369,7 +369,6 @@ for (const button of document.querySelectorAll('[data-game]')) {
     setupGame = button.dataset.game;
     el('setup-title').textContent = labels[setupGame];
     el('opponent-mode').value = 'friend';
-    el('rules-label').hidden = el('draughts-rules').hidden = setupGame !== 'draughts';
     updateSetupClock();
     el('setup').returnValue = '';
     el('setup').showModal();
@@ -383,7 +382,7 @@ el('setup').onclose = () => {
   if (el('setup').returnValue !== 'create') return;
     const mode = el('opponent-mode').value;
   perform(async () => show(await api('',{game:setupGame,clock:mode === 'friend' ? el('clock-mode').value : 'none',
-    rules:el('draughts-rules').value,training:mode === 'friend' ? null : mode})));
+    training:mode === 'friend' ? null : mode})));
 };
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));

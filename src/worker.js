@@ -21,7 +21,7 @@ async function webhook(request, env, origin) {
   }
   const {message, inline_query: query} = await body(request);
   if (query) {
-    const games = [['draughts','Русские шашки','huff'],['draughts','Русские шашки: обязательное взятие','strict'],['chess','Шахматы','huff']];
+    const games = [['draughts','Русские шашки','huff'],['chess','Шахматы','huff']];
     const search = query.query.trim().toLowerCase();
     const results = games.filter(([id,title]) => id.includes(search) || title.toLowerCase().includes(search))
       .map(([id,title,rules]) => ({
@@ -115,7 +115,7 @@ async function room(request, env, path, ctx) {
     if (!['chess','draughts'].includes(input.game)) fail(400,'Выберите игру');
     const clock = input.clock ?? 'none';
     if (!Object.hasOwn(clocks,clock)) fail(400,'Выберите контроль времени');
-    const rules = input.game === 'draughts' && input.rules === 'strict' ? 'strict' : 'huff';
+    const rules = 'huff';
     const training = input.training ?? null;
     if (training !== null && !['easy','normal'].includes(training)) fail(400,'Выберите сложность');
     if (training && clock !== 'none') fail(400,'Тренировка идёт без часов');
