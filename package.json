@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "chess.js": "^1.4.0"
+  },
+  "name": "botshah",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "node --env-file-if-exists=.env src/server.js"
+  },
+  "private": true
+}
