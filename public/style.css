@@ -305,3 +305,14 @@ main:has(#game:not([hidden])) #status:not(.match-status) { margin: 3px 0; min-he
   text-shadow: 0 2px 2px #1a0e0acc;
 }
 .moving-source .chess-piece { visibility: hidden; }
+
+.room-entry { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; }
+#extras .room-close {
+  align-self: center;
+  min-height: 40px;
+  padding: 5px 8px;
+  background: #172b22;
+  color: #f6d9a3;
+  border-color: #927441;
+  font-size: 12px;
+}

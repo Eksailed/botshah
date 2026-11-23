@@ -48,7 +48,7 @@ async function webhook(request, env, origin) {
 async function room(request, env, path, ctx) {
   const user = verifyLaunch(request.headers.get('X-Telegram-Init-Data') ?? '',env.BOT_TOKEN);
   const db = env.DB;
-  const match = /^\/api\/rooms\/([a-f0-9]{24})(?:\/(join|move|rematch|review))?$/.exec(path);
+  const match = /^\/api\/rooms\/([a-f0-9]{24})(?:\/(join|move|rematch|review|close))?$/.exec(path);
   const post = request.method === 'POST';
   const input = post ? await body(request) : {};
   if (path === '/api/rooms/preferences') {
@@ -64,11 +64,11 @@ async function room(request, env, path, ctx) {
   if (path === '/api/rooms/puzzle' && post) return Response.json(puzzle(input.game,input.move));
   if (path === '/api/rooms' && request.method === 'GET') {
     const {results} = await db.prepare(
-      "SELECT id,game,black IS NOT NULL AS ready, white = ?1 AS isWhite, turn, CASE WHEN turn IS NULL THEN history END AS legacy "+
+      "SELECT id,game,black IS NOT NULL AS ready, history != '[]' AS started, white = ?1 AS isWhite, turn, CASE WHEN turn IS NULL THEN history END AS legacy "+
       "FROM rooms WHERE (white = ?1 OR black = ?1) AND result IS NULL ORDER BY rowid DESC"
     ).bind(user).all();
-    return Response.json({rooms:results.map(({id,game,ready,isWhite,turn,legacy}) => ({
-      id,game,ready,yourTurn:(turn ?? position(game,JSON.parse(legacy)).turn) === (isWhite ? 'w' : 'b')
+    return Response.json({rooms:results.map(({id,game,ready,started,isWhite,turn,legacy}) => ({
+      id,game,ready,started,yourTurn:(turn ?? position(game,JSON.parse(legacy)).turn) === (isWhite ? 'w' : 'b')
     })).sort((a,b) => Number(b.ready && b.yourTurn)-Number(a.ready && a.yourTurn))},{headers:{'Cache-Control':'no-store'}});
   }
   let id = match?.[1];
@@ -81,15 +81,16 @@ async function room(request, env, path, ctx) {
     await db.prepare('INSERT INTO rooms (id,game,white,clock,white_ms,black_ms) VALUES (?,?,?,?,?,?)')
       .bind(id,input.game,user,clock,clocks[clock],clocks[clock]).run();
   } else if (post && action === 'join') {
-    await db.prepare("UPDATE rooms SET black = ?, started_ms = CASE WHEN clock != 'none' THEN ? END WHERE id = ? AND white != ? AND black IS NULL")
+    await db.prepare("UPDATE rooms SET black = ?, started_ms = CASE WHEN clock != 'none' THEN ? END WHERE id = ? AND white != ? AND black IS NULL AND result IS NULL")
       .bind(user,Date.now(),id,user).run();
-  } else if (!(match && ((post && ['move','rematch','review'].includes(action)) || (request.method === 'GET' && !action)))) {
+  } else if (!(match && ((post && ['move','rematch','review','close'].includes(action)) || (request.method === 'GET' && !action)))) {
     fail(404,'Запрос не найден');
   }
 
   let row = await db.prepare('SELECT * FROM rooms WHERE id = ?').bind(id).first();
   if (!row) fail(404,'Комната не найдена');
   const side = row.white === user ? 'w' : row.black === user ? 'b' : fail(403,'Комната занята');
+  if (row.result === 'cancelled') fail(410,'Партия отозвана');
   const history = JSON.parse(row.history);
   let state = position(row.game,history);
   const ready = row.black !== null;
@@ -103,6 +104,17 @@ async function room(request, env, path, ctx) {
     if (row.history !== JSON.stringify(history)) fail(409,'Позиция уже изменилась');
   }
   state.result = row.result ?? state.result;
+  if (action === 'close') {
+    if (state.result) fail(409,'Партия уже завершена');
+    const required = history.length ? 'resign' : 'withdraw';
+    if (input.intent !== required) fail(409,'Партия изменилась. Обновите список');
+    const result = required === 'withdraw' ? 'cancelled' : side === 'w' ? 'b' : 'w';
+    const changed = await db.prepare(
+      'UPDATE rooms SET result = ? WHERE id = ? AND history = ? AND result IS NULL'
+    ).bind(result,id,row.history).run();
+    if (!changed.meta.changes) fail(409,'Партия изменилась. Обновите список');
+    return Response.json({ok:true});
+  }
   if (action === 'review') {
     if (!state.result) fail(403,'Партия ещё идёт');
     if (!Number.isInteger(input.ply) || input.ply < 0 || input.ply > history.length) fail(400,'Ход не найден');
@@ -164,7 +176,7 @@ async function room(request, env, path, ctx) {
   return Response.json({...state,id,game:row.game,side,ready,score,rematch:rematch?.id ?? null,
     offer:row.offer === user ? 'sent' : row.offer !== null ? 'received' : null,
     clock:{mode:row.clock,w:row.white_ms,b:row.black_ms,started:row.started_ms,now:Date.now()},lastMove:history.at(-1) ?? null,version:history.length,
-    moves:ready && state.turn === side ? state.moves : [],
+    moves:ready && !state.result && state.turn === side ? state.moves : [],
     invite:'https://t.me/'+env.BOT_USERNAME+'?startapp='+id},{headers:{'Cache-Control':'no-store'}});
 }
 

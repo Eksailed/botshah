@@ -318,7 +318,7 @@ el('setup').onclose = () => {
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));
 }
-el('my-games').onclick = () => perform(async () => {
+async function loadRooms() {
   menuTab('my-games');
   const {rooms} = await api('');
   const list = el('room-list');
@@ -341,9 +341,32 @@ el('my-games').onclick = () => perform(async () => {
     button.append(art,title);
     paintClubArt(art);
     button.onclick = () => perform(async () => show(await api('/'+room.id)));
-    list.append(button);
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'room-close';
+    close.textContent = room.started ? 'Сдаться' : 'Отозвать';
+    close.setAttribute('aria-label',close.textContent+' — '+labels[room.game]);
+    close.onclick = () => {
+      const question = room.started ? 'Сдаться? Сопернику засчитается победа.' : 'Отозвать партию? Приглашение перестанет действовать.';
+      if (!window.confirm(question)) return;
+      perform(async () => {
+        try {
+          await api('/'+room.id+'/close',{intent:room.started ? 'resign' : 'withdraw'});
+        } catch (error) {
+          if (error.status === 409 || error.status === 410) await loadRooms();
+          throw error;
+        }
+        await refreshContinue();
+        await loadRooms();
+      });
+    };
+    const row = document.createElement('div');
+    row.className = 'room-entry';
+    row.append(button,close);
+    list.append(row);
   }
-});
+}
+el('my-games').onclick = () => perform(loadRooms);
 el('rematch').onclick = () => perform(async () => {
   const next = state.rematch ? state : await api('/'+state.id+'/rematch',{});
   await show(next.rematch ? await api('/'+next.rematch) : next);
