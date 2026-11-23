@@ -140,9 +140,11 @@ async function show(next) {
   try { if (!next.task) localStorage.setItem('last-room',last); } catch {}
   const score = el('score');
   score.hidden = !state.score;
+  el('share-score').disabled = false;
   if (state.score) {
     const {wins,losses,draws} = state.score;
-    score.textContent = 'С этим соперником: побед '+wins+' · поражений '+losses+' · ничьих '+draws;
+    score.textContent = labels[state.game]+' · счёт '+wins+':'+losses+' · ничьих '+draws;
+    score.classList.toggle('result-score',Boolean(state.result));
   }
   el('title').textContent = labels[state.game];
   el('lobby').hidden = true;
@@ -160,6 +162,8 @@ function actions() {
   const rule = el('game-rule');
   rule.hidden = state.task || state.game !== 'draughts';
   rule.textContent = state.rules === 'strict' ? 'Обязательное взятие' : 'За фук';
+  const canShare = Boolean(state.result && state.score && state.opponent && !review);
+  el('opponent-history').hidden = el('share-score').hidden = !canShare;
   const canDraw = state.ready && !state.task && !state.training && !state.result && !review;
   el('draw-offer').hidden = !canDraw;
   el('draw-offer').disabled = state.drawOffer === 'sent';
@@ -458,8 +462,7 @@ el('training-undo').onclick = () => {
 };
 async function loadRooms(archived = false) {
   menuTab('my-games');
-  el('active-rooms').setAttribute('aria-pressed',String(!archived));
-  el('archived-rooms').setAttribute('aria-pressed',String(archived));
+  selectPartyTab(archived ? 'archived-rooms' : 'active-rooms');
   const {rooms} = await api(archived ? '/archive' : '');
   const list = el('room-list');
   list.replaceChildren();
@@ -524,6 +527,91 @@ async function loadRooms(archived = false) {
 }
 el('my-games').onclick = el('active-rooms').onclick = () => perform(loadRooms);
 el('archived-rooms').onclick = () => perform(() => loadRooms(true));
+function selectPartyTab(id) {
+  for (const tab of ['active-rooms','archived-rooms','opponents-rooms']) {
+    el(tab).setAttribute('aria-pressed',String(tab === id));
+  }
+}
+function menuButton(label, action) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.onclick = () => perform(action);
+  return button;
+}
+function tallyText({wins,losses,draws}) {
+  return wins+':'+losses+' · ничьих '+draws;
+}
+function shareScore(url,label,score) {
+  tg.openTelegramLink('https://t.me/share/url?url='+encodeURIComponent(url)+'&text='+
+    encodeURIComponent('Наш счёт в «Доске» ('+label+'): '+tallyText(score)+'. Сначала мои победы.'));
+}
+async function showOpponents() {
+  menuTab('my-games');
+  selectPartyTab('opponents-rooms');
+  const {opponents} = await api('/opponents');
+  const list = el('room-list');
+  list.replaceChildren();
+  if (!opponents.length) {
+    const empty = document.createElement('p');
+    empty.className = 'room-empty';
+    empty.textContent = 'Завершённых встреч пока нет';
+    list.append(empty);
+  }
+  for (const opponent of opponents) {
+    const button = menuButton(opponent.name+' · '+tallyText(opponent),() => showMeetings(opponent.id));
+    button.className = 'meeting-card';
+    list.append(button);
+  }
+}
+async function showMeetings(opponent,game = 'all') {
+  const {name,groups,rooms,shareUrl} = await api('/opponents',{opponent,game});
+  const totals = {wins:0,losses:0,draws:0};
+  for (const group of groups) {
+    if (game !== 'all' && game !== group.game) continue;
+    for (const key of Object.keys(totals)) totals[key] += group[key];
+  }
+  menuTab('my-games');
+  selectPartyTab('opponents-rooms');
+  const list = el('room-list');
+  const title = document.createElement('h2');
+  title.className = 'meeting-title';
+  title.textContent = name+' · '+tallyText(totals);
+  const filters = document.createElement('div');
+  filters.className = 'actions archive-tabs';
+  for (const [id,label] of [['all','Все'],['draughts','Шашки'],['chess','Шахматы']]) {
+    const filter = menuButton(label,() => showMeetings(opponent,id));
+    filter.setAttribute('aria-pressed',String(game === id));
+    filters.append(filter);
+  }
+  list.replaceChildren(title,filters);
+  if (!rooms.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'В этом режиме встреч пока нет';
+    list.append(empty);
+  }
+  for (const room of rooms) {
+    const result = room.result === 'draw' ? 'Ничья' : (room.result === 'w') === Boolean(room.isWhite) ? 'Победа' : 'Поражение';
+    const date = room.date ? new Intl.DateTimeFormat('ru',{day:'numeric',month:'short'}).format(room.date) : null;
+    const button = menuButton([labels[room.game],result,date].filter(Boolean).join(' · '),async () => show(await api('/'+room.id)));
+    button.className = 'meeting-card';
+    list.append(button);
+  }
+  const controls = document.createElement('div');
+  controls.className = 'actions meeting-controls';
+  controls.append(menuButton('К соперникам',showOpponents));
+  if (rooms.length) controls.append(menuButton('Поделиться счётом',() => shareScore(shareUrl,labels[game] ?? 'все встречи',totals)));
+  list.append(controls);
+}
+el('opponents-rooms').onclick = () => perform(showOpponents);
+el('opponent-history').onclick = () => perform(async () => {
+  const {opponent,game} = state;
+  lobby();
+  await showMeetings(opponent.id,game);
+});
+el('share-score').onclick = () => {
+  if (!busy && state?.score) shareScore(state.invite.split('?')[0],labels[state.game],state.score);
+};
 el('rematch').onclick = () => perform(async () => {
   const next = state.rematch ? state : await api('/'+state.id+'/rematch',{});
   await show(next.rematch ? await api('/'+next.rematch) : next);

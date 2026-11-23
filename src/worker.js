@@ -102,6 +102,34 @@ async function room(request, env, path, ctx) {
       id,game,ready,started,training,yourTurn:(turn ?? position(game,JSON.parse(legacy)).turn) === (isWhite ? 'w' : 'b')
     })).sort((a,b) => Number(b.ready && b.yourTurn)-Number(a.ready && a.yourTurn))},{headers:{'Cache-Control':'no-store'}});
   }
+  if (path === '/api/rooms/opponents') {
+    const pairs = "WITH meetings AS (SELECT id,game,result,result_reason,updated_at,white = ?1 AS is_white, "+
+      "CASE WHEN white = ?1 THEN black ELSE white END AS opponent FROM rooms "+
+      "WHERE (white = ?1 OR black = ?1) AND black IS NOT NULL AND training IS NULL AND result IN ('w','b','draw')) ";
+    const score = "sum(CASE WHEN result = CASE WHEN is_white THEN 'w' ELSE 'b' END THEN 1 ELSE 0 END) AS wins, "+
+      "sum(CASE WHEN result = CASE WHEN is_white THEN 'b' ELSE 'w' END THEN 1 ELSE 0 END) AS losses, "+
+      "sum(CASE WHEN result = 'draw' THEN 1 ELSE 0 END) AS draws ";
+    if (request.method === 'GET') {
+      const {results} = await db.prepare(pairs+
+        "SELECT opponent AS id,COALESCE(p.name,'Соперник') AS name,"+score+
+        "FROM meetings LEFT JOIN players p ON p.id = opponent GROUP BY opponent ORDER BY max(updated_at) DESC,max(meetings.id) DESC")
+        .bind(user).all();
+      return Response.json({opponents:results},{headers:{'Cache-Control':'no-store'}});
+    }
+    if (post) {
+      const {opponent,game = 'all'} = input;
+      if (!Number.isSafeInteger(opponent) || opponent <= 0 || !['all','chess','draughts'].includes(game)) fail(400,'Выберите соперника');
+      const {results:groups} = await db.prepare(pairs+"SELECT game,"+score+"FROM meetings WHERE opponent = ?2 GROUP BY game")
+        .bind(user,opponent).all();
+      if (!groups.length) fail(404,'Нет завершённых встреч с этим соперником');
+      const {results:rooms} = await db.prepare(pairs+
+        "SELECT id,game,result,result_reason AS reason,updated_at AS date,is_white AS isWhite "+
+        "FROM meetings WHERE opponent = ?2 AND (?3 = 'all' OR game = ?3) ORDER BY updated_at DESC,id DESC LIMIT 30")
+        .bind(user,opponent,game).all();
+      const player = await db.prepare('SELECT name FROM players WHERE id = ?').bind(opponent).first();
+      return Response.json({name:player?.name ?? 'Соперник',groups,rooms,shareUrl:'https://t.me/'+env.BOT_USERNAME},{headers:{'Cache-Control':'no-store'}});
+    }
+  }
   if (path === '/api/rooms/archive' && request.method === 'GET') {
     const {results} = await db.prepare(
       "SELECT r.id,r.game,r.result,r.result_reason AS reason,r.updated_at AS date,r.white = ?1 AS isWhite,r.training,p.name AS opponent "+
@@ -249,19 +277,22 @@ async function room(request, env, path, ctx) {
     }
   }
   let score = null;
+  let opponent = null;
   if (ready && !row.training) {
-    const opponent = side === 'w' ? row.black : row.white;
+    const opponentId = side === 'w' ? row.black : row.white;
+    const player = await db.prepare('SELECT name FROM players WHERE id = ?').bind(opponentId).first();
+    opponent = {id:opponentId,name:player?.name ?? 'Соперник'};
     score = await db.prepare(
       "SELECT count(CASE WHEN result = 'draw' THEN 1 END) AS draws, "+
       "count(CASE WHEN (white = ?1 AND result = 'w') OR (black = ?1 AND result = 'b') THEN 1 END) AS wins, "+
       "count(CASE WHEN (white = ?1 AND result = 'b') OR (black = ?1 AND result = 'w') THEN 1 END) AS losses "+
-      "FROM rooms WHERE training IS NULL AND result IS NOT NULL AND ((white = ?1 AND black = ?2) OR (white = ?2 AND black = ?1))"
-    ).bind(user,opponent).first();
+      "FROM rooms WHERE game = ?3 AND training IS NULL AND result IN ('w','b','draw') AND ((white = ?1 AND black = ?2) OR (white = ?2 AND black = ?1))"
+    ).bind(user,opponentId,row.game).first();
   }
   const rematch = state.result && ready && !row.training
     ? await db.prepare('SELECT id FROM rooms WHERE previous = ?').bind(id).first()
     : null;
-  return Response.json({...state,id,game:row.game,side,ready,score,training:row.training,rules:row.rules,reason,
+  return Response.json({...state,id,game:row.game,side,ready,score,opponent,training:row.training,rules:row.rules,reason,
     drawOffer:row.draw_offer === user ? 'sent' : row.draw_offer !== null ? 'received' : null,rematch:rematch?.id ?? null,
     offer:row.offer === user ? 'sent' : row.offer !== null ? 'received' : null,
     clock:{mode:row.clock,w:row.white_ms,b:row.black_ms,started:row.started_ms,now:Date.now()},lastMove:history.at(-1) ?? null,version:history.length,

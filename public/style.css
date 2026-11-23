@@ -536,3 +536,23 @@ dialog button:not(.brass) {
   background: #ffda68;
   box-shadow: 0 0 0 2px #fff0b9;
 }
+
+#party-panel .archive-tabs { grid-template-columns: repeat(3,minmax(0,1fr)); }
+#extras .archive-tabs button { font-size: clamp(11px,3.6vw,14px); }
+#extras .meeting-card {
+  min-height: 48px;
+  padding: 9px 12px;
+  border-color: #a6844e;
+  background: linear-gradient(120deg,#304b3a,#142d22);
+  text-align: left;
+}
+.meeting-title { margin: 5px 0; font: 700 19px var(--font-display); }
+.meeting-controls { margin-top: 4px; }
+#game #score.result-score {
+  padding: 6px 8px;
+  border: 1px solid #9e7941;
+  border-radius: 7px;
+  background: #2b442e;
+  color: #ffe1a0;
+  font-size: 13px;
+}
