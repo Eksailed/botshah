@@ -323,7 +323,12 @@ async function loadRooms() {
   const {rooms} = await api('');
   const list = el('room-list');
   list.replaceChildren();
-  if (!rooms.length) list.textContent = 'Активных партий пока нет';
+  if (!rooms.length) {
+    const empty = document.createElement('p');
+    empty.className = 'room-empty';
+    empty.textContent = 'Активных партий пока нет';
+    list.append(empty);
+  }
   for (const room of rooms) {
     const button = document.createElement('button');
     button.className = 'club-tile';

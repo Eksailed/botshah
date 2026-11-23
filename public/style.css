@@ -344,3 +344,20 @@ main:has(#extras:not([hidden])) {
   margin: 0;
   box-shadow: 0 -4px 18px #07180f90;
 }
+
+main:has(#party-panel:not([hidden]) .room-empty) {
+  display: flex;
+  flex-direction: column;
+}
+#extras:has(#party-panel:not([hidden]) .room-empty),
+#party-panel:has(.room-empty) {
+  flex: 1;
+  display: grid;
+}
+#room-list:has(.room-empty) { place-items: center; }
+.room-empty {
+  margin: 0;
+  padding: 12px;
+  text-align: center;
+  color: #e6d5ad;
+}
