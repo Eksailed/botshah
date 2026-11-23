@@ -9,7 +9,9 @@ const assets = new Map([
   ['/',['index.html','text/html']],
   ['/app.js',['app.js','text/javascript']],
   ['/style.css',['style.css','text/css']],
-  ['/club-art.png',['club-art.png','image/png']]
+  ['/club-art.png',['club-art.png','image/png']],
+  ['/fonts/lora.ttf',['fonts/lora.ttf','font/ttf']],
+  ['/fonts/golostext.ttf',['fonts/golostext.ttf','font/ttf']]
 ]);
 
 export function application({token, username, store}) {
