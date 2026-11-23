@@ -133,25 +133,50 @@ function actions() {
   rematch.disabled = state.offer === 'sent' && !state.rematch;
   rematch.textContent = state.rematch ? 'Открыть реванш' : state.offer === 'received'
     ? 'Принять реванш' : state.offer === 'sent' ? 'Реванш предложен' : 'Реванш';
-  el('invite').hidden = Boolean(state.task || review);
+  el('invite').hidden = Boolean(state.task || review || state.ready);
   el('review').hidden = !state.result || !state.version || Boolean(review);
   el('review-controls').hidden = !review;
   drawClocks();
 }
 
 function drawClocks() {
-  const clock = state?.clock;
-  const view = el('clocks');
-  view.hidden = !clock || clock.mode === 'none' || Boolean(review);
-  if (view.hidden) return;
+  if (!state || state.task || review || state.clock?.mode === 'none' || !state.clock) {
+    el('self-clock').hidden = el('opponent-clock').hidden = true;
+    return;
+  }
+  const clock = state.clock;
   const elapsed = !state.result && clock.started !== null
     ? Math.max(0,clock.now-clock.started+performance.now()-clockReceived) : 0;
-  const format = side => {
+  for (const [id,side] of [['self-clock',state.side],['opponent-clock',state.side === 'w' ? 'b' : 'w']]) {
     const seconds = Math.ceil(Math.max(0,clock[side]-(state.turn === side ? elapsed : 0))/1000);
     const hours = Math.floor(seconds/3600);
-    return (hours ? hours+' ч ' : '')+Math.floor(seconds%3600/60)+':'+String(seconds%60).padStart(2,'0');
-  };
-  view.textContent = 'Белые '+format('w')+' · Чёрные '+format('b');
+    const minutes = String(Math.floor(seconds%3600/60)).padStart(2,'0');
+    const label = (hours ? hours+' ч ' : '')+minutes+':'+String(seconds%60).padStart(2,'0');
+    const clockEl = el(id);
+    clockEl.hidden = false;
+    if (clockEl.textContent !== label) clockEl.textContent = label;
+  }
+}
+
+function updateBoardFrame() {
+  const panelHidden = Boolean(state.task || review);
+  const playing = !panelHidden && state.ready && !state.result;
+  const white = state.side === 'w';
+  el('self-panel').hidden = el('opponent-panel').hidden = panelHidden;
+  el('self-panel').dataset.side = state.side;
+  el('opponent-panel').dataset.side = white ? 'b' : 'w';
+  el('opponent-name').textContent = state.ready ? 'Соперник' : 'Место свободно';
+  el('self-turn').hidden = !playing || state.turn !== state.side;
+  el('opponent-turn').hidden = !playing || state.turn === state.side;
+  el('status').classList.toggle('match-status',playing);
+  for (const [id,values] of [['files',white ? 'abcdefgh' : 'hgfedcba'],['ranks',white ? '87654321' : '12345678']]) {
+    if (el(id).textContent === values) continue;
+    el(id).replaceChildren(...Array.from(values, value => {
+      const label = document.createElement('span');
+      label.textContent = value;
+      return label;
+    }));
+  }
 }
 
 async function showReview(ply) {
@@ -165,6 +190,7 @@ async function showReview(ply) {
 }
 
 function draw() {
+  updateBoardFrame();
   const display = review ?? state;
   const targets = new Set(state.moves.filter(m => m.from === selected).map(m => m.to));
   const squares = Array.from({length:64},(_,i) => {
