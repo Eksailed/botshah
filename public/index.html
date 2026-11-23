@@ -10,8 +10,9 @@
   <h1 id="title">Доска</h1>
   <p id="status" role="status"></p>
   <section id="lobby" hidden>
-    <button data-game="chess">♞ Шахматы</button>
+    <div class="lobby-board" aria-hidden="true"><span class="white"><span class="disc">♛</span></span></div>
     <button data-game="draughts">● Русские шашки</button>
+    <button data-game="chess">♞ Шахматы</button>
     <button id="resume" hidden>Продолжить партию</button>
   </section>
   <section id="game" hidden>
