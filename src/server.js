@@ -8,7 +8,8 @@ import { runBot } from './bot.js';
 const assets = new Map([
   ['/',['index.html','text/html']],
   ['/app.js',['app.js','text/javascript']],
-  ['/style.css',['style.css','text/css']]
+  ['/style.css',['style.css','text/css']],
+  ['/club-art.png',['club-art.png','image/png']]
 ]);
 
 export function application({token, username, store}) {
@@ -22,7 +23,7 @@ export function application({token, username, store}) {
       if (req.method === 'GET' && assets.has(path)) {
         const [file,type] = assets.get(path);
         const content = readFileSync(new URL('../public/'+file,import.meta.url));
-        res.writeHead(200,{'Content-Type':type+'; charset=utf-8'});
+        res.writeHead(200,{'Content-Type':type.startsWith('text/') ? type+'; charset=utf-8' : type});
         return res.end(content);
       }
       if (!path.startsWith('/api/')) fail(404,'Страница не найдена');

@@ -5,7 +5,7 @@ const symbols = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 const names = {k:'король',q:'ферзь',r:'ладья',b:'слон',n:'конь',p:'пешка'};
 const roomId = /^[a-f0-9]{24}$/;
 let state, selected, busy = false, choice = [];
-let last, review, clockReceived;
+let last, review, clockReceived, setupGame, continueId;
 
 async function api(path,body) {
   const response = await fetch('/api/rooms'+path,{
@@ -28,7 +28,11 @@ function lobby() {
   el('status').textContent = 'Выберите игру';
   el('game').hidden = true;
   el('lobby').hidden = false;
-  el('resume').hidden = !last;
+  el('settings').hidden = false;
+  menuTab('play-tab');
+  continueId = undefined;
+  el('resume').hidden = true;
+  if (tg?.initData) void refreshContinue();
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -100,6 +104,7 @@ async function show(next) {
   state = next;
   clockReceived = performance.now();
   el('extras').hidden = true;
+  el('settings').hidden = true;
   el('feedback').hidden = !next.task || next.solved === null;
   el('feedback').textContent = next.solved ? 'Задача решена!' : 'Попробуйте другой ход';
   if (next.solved) state.moves = [];
@@ -236,13 +241,53 @@ function send(move) {
   });
 }
 
-for (const button of document.querySelectorAll('[data-game]')) {
-  button.onclick = () => perform(async () => show(await api('',{game:button.dataset.game,clock:el('clock-mode').value})));
+function menuTab(id) {
+  for (const tab of ['play-tab','my-games','puzzle-tab']) {
+    el(tab).setAttribute('aria-pressed',String(tab === id));
+  }
+  el('lobby').hidden = id !== 'play-tab';
+  el('party-panel').hidden = id !== 'my-games';
+  el('puzzle-panel').hidden = id !== 'puzzle-tab';
 }
+async function refreshContinue() {
+  try {
+    const {rooms} = await api('');
+    if (state) return;
+    const room = rooms.find(r => r.ready && r.yourTurn) ?? rooms.find(r => r.id === last) ?? rooms[0];
+    continueId = room?.id;
+    el('resume').hidden = !room;
+    if (room) {
+      el('resume').textContent = room.ready && room.yourTurn
+        ? 'Ваш ход · Продолжить партию' : 'Продолжить партию';
+    }
+  } catch {
+    // Остальные действия главного меню доступны независимо от списка партий.
+  }
+}
+el('play-tab').onclick = () => { if (!busy) menuTab('play-tab'); };
+el('puzzle-tab').onclick = () => { if (!busy) menuTab('puzzle-tab'); };
+el('settings').onclick = () => {
+  el('settings-dialog').showModal();
+  void api('/preferences').then(({enabled}) => showPreference(enabled)).catch(() => {});
+};
+for (const button of document.querySelectorAll('[data-game]')) {
+  button.onclick = () => {
+    if (busy) return;
+    setupGame = button.dataset.game;
+    el('setup-title').textContent = labels[setupGame];
+    el('setup').returnValue = '';
+    el('setup').showModal();
+  };
+}
+el('setup').onclose = () => {
+  if (el('setup').returnValue !== 'create') return;
+  perform(async () => show(await api('',{game:setupGame,clock:el('clock-mode').value})));
+};
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));
 }
 el('my-games').onclick = () => perform(async () => {
+  menuTab('my-games');
   const {rooms} = await api('');
   const list = el('room-list');
   list.replaceChildren();
@@ -278,7 +323,7 @@ el('notifications').onclick = () => perform(async () => {
   }
   showPreference((await api('/preferences',{enabled:!enabled})).enabled);
 });
-el('resume').onclick = () => perform(async () => show(await api('/'+last)));
+el('resume').onclick = () => perform(async () => show(await api('/'+continueId)));
 el('back').onclick = () => { if (!busy) lobby(); };
 el('invite').onclick = () => {
   const url = 'https://t.me/share/url?url='+encodeURIComponent(state.invite);

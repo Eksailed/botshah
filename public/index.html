@@ -7,24 +7,49 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script type="module" src="/app.js"></script>
 <main>
-  <h1 id="title">Доска</h1>
+  <header class="app-header">
+    <h1 id="title">Доска</h1>
+    <button id="settings" class="club-settings" aria-label="Настройки" hidden>⚙</button>
+  </header>
   <p id="status" role="status"></p>
   <section id="lobby" hidden>
-    <div class="lobby-board" aria-hidden="true"><span class="white"><span class="disc">♛</span></span></div>
-    <label>Контроль времени
-      <select id="clock-mode"><option value="none">Без часов</option><option value="rapid">5 мин + 3 с за ход</option><option value="daily">1 день на ход</option></select>
-    </label>
-    <button data-game="draughts">● Русские шашки</button>
-    <button data-game="chess">♞ Шахматы</button>
+    <div class="club-hero" aria-hidden="true"></div>
     <button id="resume" hidden>Продолжить партию</button>
+    <button class="club-tile draughts-tile" data-game="draughts"><span>Русские шашки</span></button>
+    <button class="club-tile chess-tile" data-game="chess"><span>Шахматы</span></button>
   </section>
-  <section id="extras" hidden class="actions">
-    <button id="my-games">Мои партии</button>
-    <button data-puzzle="draughts">Задача дня: шашки</button>
-    <button data-puzzle="chess">Задача дня: шахматы</button>
-    <button id="notifications">Уведомления о ходе</button>
-    <div id="room-list"></div>
+  <section id="extras" hidden>
+    <div id="party-panel" hidden><div id="room-list"></div></div>
+    <div id="puzzle-panel" hidden class="actions">
+      <button data-puzzle="draughts">Задача дня: шашки</button>
+      <button data-puzzle="chess">Задача дня: шахматы</button>
+    </div>
+    <nav class="club-nav" aria-label="Главное меню">
+      <button id="play-tab" aria-pressed="true">Играть</button>
+      <button id="my-games" aria-pressed="false">Партии</button>
+      <button id="puzzle-tab" aria-pressed="false">Задачи</button>
+    </nav>
   </section>
+  <dialog id="setup">
+    <form method="dialog">
+      <h2 id="setup-title"></h2>
+      <label for="clock-mode">Контроль времени</label>
+      <select id="clock-mode">
+        <option value="none">Без часов</option>
+        <option value="rapid">5 мин + 3 с за ход</option>
+        <option value="daily">1 день на ход</option>
+      </select>
+      <button id="create-game" class="brass" value="create">Создать партию</button>
+      <button value="cancel">Отмена</button>
+    </form>
+  </dialog>
+  <dialog id="settings-dialog">
+    <form method="dialog">
+      <h2>Настройки</h2>
+      <button id="notifications" type="button">Уведомления о ходе</button>
+      <button>Закрыть</button>
+    </form>
+  </dialog>
   <section id="game" hidden>
     <p id="clocks" hidden></p>
     <div id="review-controls" class="actions" hidden>
