@@ -10,7 +10,7 @@ export function position(game, history, fen, rules = 'huff') {
     for (const {from,to,promotion} of history) chess.move({from:square(from),to:square(to),promotion});
     const turn = chess.turn();
     const result = chess.isCheckmate() ? (turn === 'w' ? 'b' : 'w') : chess.isDraw() ? 'draw' : null;
-    return {turn,result,board:chess.board().flat().map(p => p ? p.color+p.type : null),
+    return {turn,result,fen:chess.fen(),board:chess.board().flat().map(p => p ? p.color+p.type : null),
       moves:result ? [] : chess.moves({verbose:true}).map(m => ({from:index(m.from),to:index(m.to),promotion:m.promotion}))};
   }
   const huff = rules !== 'strict';

@@ -609,3 +609,16 @@ dialog button:not(.brass) {
 @media (prefers-reduced-motion: reduce) {
   #match-result[open] { animation: none; }
 }
+
+#board { touch-action: none; user-select: none; }
+.drag-piece { transform: translate(-50%,-50%); }
+#game #connection-status {
+  padding: 4px 7px;
+  border: 1px solid #987746;
+  border-radius: 6px;
+  color: #ffe1a0;
+  font-size: 12px;
+}
+#game #connection-status[data-kind="offline"] { background: #3a2e21; }
+#opponent-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#result-rematch { border-color: #d6af66; }

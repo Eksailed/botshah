@@ -248,7 +248,7 @@ async function room(request, env, path, ctx) {
     const actor = bot ? 'b' : side;
     if (bot && !row.training) fail(403,'Это не тренировка');
     if (!ready || state.turn !== actor || state.result) fail(403,'Ход сейчас недоступен');
-    const move = bot ? computerMove(state,row.training) : state.moves.find(m => m.from === input.from && m.to === input.to && m.promotion === input.promotion);
+    const move = bot ? computerMove(state,row.training,row.game,row.rules) : state.moves.find(m => m.from === input.from && m.to === input.to && m.promotion === input.promotion);
     if (!move) fail(400,'Недопустимый ход');
     history.push({from:move.from,to:move.to,promotion:move.promotion});
     state = evaluate(history);

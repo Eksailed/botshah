@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { Chess } from 'chess.js';
+import { draughts, step } from './draughts.js';
 
 const sign = (token, data) => createHmac('sha256',token).update('challenge:'+data).digest('base64url').slice(0,22);
 
@@ -18,19 +20,56 @@ export function readChallenge(token, payload) {
     rules:parts[2] === 's' ? 'strict' : 'huff',id:parts[3]};
 }
 
-export function computerMove(state, level) {
+const values = {p:1,n:3,b:3,r:5,q:9,k:4};
+const chessSquare = index => 'abcdefgh'[index%8]+(8-(index>>3));
+
+export function computerMove(state, level, game, rules) {
   const {moves,board} = state;
+  if (!moves.length) return undefined;
   if (level === 'easy') return moves[Math.floor(Math.random()*moves.length)];
-  const values = {p:1,n:3,b:3,r:5,q:9,k:4};
+  const material = piece => piece ? (values[piece[1]] ?? 0) : 0;
   const weight = move => {
-    if (move.from === move.to) return values[board[move.from]?.[1]] ?? 1;
     const target = board[move.victim ?? move.to];
-    const capture = target && target[0] !== state.turn ? (values[target[1]] ?? 1)*10 : 0;
-    const col = move.to%8;
-    const row = move.to>>3;
-    return capture+(move.promotion === 'q' ? 8 : 0)+4-(Math.abs(col-3.5)+Math.abs(row-3.5))/2;
+    const capture = target && target[0] !== state.turn ? material(target) : 0;
+    const center = 4-(Math.abs(move.to%8-3.5)+Math.abs((move.to>>3)-3.5))/2;
+    return capture*10+(move.promotion === 'q' ? 8 : 0)+center;
   };
-  const best = Math.max(...moves.map(weight));
-  const choices = moves.filter(move => weight(move) === best);
-  return choices[Math.floor(Math.random()*choices.length)];
+  const candidates = moves.map(move => ({move,weight:weight(move)}))
+    .sort((a,b) => b.weight-a.weight).slice(0,8);
+  const chess = game === 'chess' ? new Chess(state.fen) : null;
+  const huff = rules !== 'strict';
+  let best = -Infinity;
+  let chosen = candidates[0].move;
+  for (const {move,weight:base} of candidates) {
+    let score = base;
+    if (chess) {
+      const to = chessSquare(move.to);
+      chess.move({from:chessSquare(move.from),to,promotion:move.promotion});
+      if (chess.isCheckmate()) return move;
+      if (chess.isAttacked(to,chess.turn())) {
+        const piece = material(board[move.from]);
+        const defended = chess.isAttacked(to,state.turn);
+        score -= piece*(defended ? 6 : 13);
+      }
+      if (chess.isCheck()) score += 2;
+      chess.undo();
+    } else {
+      const after = draughts(step(state,move,huff),huff);
+      if (after.result === state.turn) return move;
+      if (after.turn !== state.turn) {
+        const danger = after.moves.reduce((worst,reply) => {
+          const square = reply.from === reply.to ? reply.from : reply.victim;
+          return Math.max(worst,material(after.board[square]));
+        },0);
+        score -= danger*12;
+      } else if (after.chain !== null) {
+        score += 4;
+      }
+    }
+    if (score > best) {
+      best = score;
+      chosen = move;
+    }
+  }
+  return chosen;
 }

@@ -8,22 +8,61 @@ let state, selected, busy = false, choice = [];
 let last, review, clockReceived, setupGame, continueId, computerTimer, puzzleHint, hintLevel = 0;
 const trainingTotal = 3;
 let trainingProgress = {};
+let connectionLost = false, pendingMove, drag, suppressBoardClick = false;
 const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',resign:'Сдача',timeout:'Время вышло',
   agreement:'По согласию',rules:'По правилам игры'};
 
 async function api(path,body) {
-  const response = await fetch('/api/rooms'+path,{
+  let response;
+  try {
+    response = await fetch('/api/rooms'+path,{
     method:body === undefined ? 'GET' : 'POST',
     headers:{'X-Telegram-Init-Data':tg.initData,'Content-Type':'application/json'},
     body:body === undefined ? undefined : JSON.stringify(body),
     signal:AbortSignal.timeout(10000)
   });
+  } catch {
+    throw Object.assign(new Error('Связь с сервером потеряна'),{network:true});
+  }
+  if ([502,503,504].includes(response.status)) {
+    throw Object.assign(new Error('Сервер временно недоступен'),{network:true});
+  }
   const data = await response.json();
   if (!response.ok) throw Object.assign(new Error(data.error),{status:response.status});
   return data;
 }
 
+function connectionStatus(message = '',kind = '') {
+  const banner = el('connection-status');
+  banner.hidden = !message;
+  banner.dataset.kind = kind;
+  if (banner.textContent !== message) banner.textContent = message;
+}
+function lostConnection() {
+  connectionLost = true;
+  connectionStatus('Связь потеряна. Восстанавливаем…','offline');
+}
+function restoreConnection(next) {
+  if (!connectionLost) return;
+  connectionLost = false;
+  const move = pendingMove;
+  pendingMove = undefined;
+  if (!move || next.version > move.version) {
+    connectionStatus(move ? 'Связь восстановлена. Позиция обновлена.' : '');
+  } else {
+    connectionStatus('Ход не отправлен. Сделайте его ещё раз.','offline');
+  }
+}
+window.addEventListener('offline',() => {
+  if (state && !state.task && !state.training && !state.result) lostConnection();
+});
+window.addEventListener('online',() => { void refreshMatch(); });
+
 function lobby() {
+  finishDrag();
+  connectionLost = false;
+  pendingMove = undefined;
+  connectionStatus();
   clearTimeout(computerTimer);
   state = selected = review = undefined;
   el('extras').hidden = false;
@@ -168,6 +207,8 @@ el('match-result').onclose = () => {
 };
 
 async function show(next) {
+  const opponentJoined = state?.id === next.id && !state.ready && next.ready && !next.training && !next.task;
+  finishDrag();
   const finished = Boolean(!next.task && next.result && state?.id === next.id && !state.result);
   const delta = next.version-state?.version;
   if (state?.id === next.id && delta > 0 && !document.hidden) {
@@ -236,6 +277,14 @@ async function show(next) {
   actions();
   draw();
   scheduleComputer();
+  if (opponentJoined && !connectionLost) {
+    const name = next.opponent?.name;
+    connectionStatus(name && name !== 'Соперник' ? name+' за доской' : 'Соперник за доской');
+    const message = el('connection-status').textContent;
+    setTimeout(() => {
+      if (el('connection-status').textContent === message) connectionStatus();
+    },3500);
+  }
   if (finished) presentMatchResult(next);
 }
 
@@ -257,6 +306,10 @@ function actions() {
   rematch.disabled = state.offer === 'sent' && !state.rematch;
   rematch.textContent = state.rematch ? 'Открыть реванш' : state.offer === 'received'
     ? 'Принять реванш' : state.offer === 'sent' ? 'Реванш предложен' : 'Реванш';
+  const resultRematch = el('result-rematch');
+  resultRematch.hidden = rematch.hidden;
+  resultRematch.disabled = rematch.disabled;
+  resultRematch.textContent = rematch.textContent;
   el('invite').hidden = Boolean(state.task || review || state.ready);
   el('review').hidden = !state.result || !state.version || Boolean(review);
   el('review-controls').hidden = !review;
@@ -289,7 +342,7 @@ function updateBoardFrame() {
   el('self-panel').hidden = el('opponent-panel').hidden = panelHidden;
   el('self-panel').dataset.side = state.side;
   el('opponent-panel').dataset.side = white ? 'b' : 'w';
-  el('opponent-name').textContent = state.training ? 'Компьютер' : state.ready ? 'Соперник' : 'Место свободно';
+  el('opponent-name').textContent = state.training ? 'Компьютер' : state.ready ? (state.opponent?.name ?? 'Соперник') : 'Место свободно';
   el('self-turn').textContent = state.huff?.length ? 'Снимите шашку' : 'Ваш ход';
   el('self-turn').hidden = !playing || state.turn !== state.side;
   el('opponent-turn').hidden = !playing || state.turn === state.side;
@@ -323,6 +376,7 @@ function draw() {
     const piece = display.taken?.includes(index) ? null : display.board[index];
     const button = document.createElement('button');
     button.className = 'cell';
+    button.dataset.square = index;
     if (((index >> 3)+index)%2) button.classList.add('dark');
     if (piece?.[0] === 'w') button.classList.add('white');
     if (puzzleHint?.from === index) button.classList.add('hint-source');
@@ -402,13 +456,96 @@ function send(move) {
       return;
     }
     const path = '/'+state.id;
-    try { await show(await api(path+'/move',{...move,version:state.version})); }
-    catch (error) {
+    if (state.training) {
+      try { await show(await api(path+'/move',{...move,version:state.version})); }
+      catch (error) {
+        if (error.status === 409) await show(await api(path));
+        else throw error;
+      }
+      return;
+    }
+    pendingMove = {version:state.version};
+    connectionStatus('Отправляем ход…');
+    try {
+      const next = await api(path+'/move',{...move,version:state.version});
+      pendingMove = undefined;
+      connectionLost = false;
+      connectionStatus();
+      await show(next);
+    } catch (error) {
+      if (error.network) {
+        lostConnection();
+        return;
+      }
+      pendingMove = undefined;
+      connectionStatus();
       if (error.status === 409) await show(await api(path));
       throw error;
     }
   });
 }
+
+const boardSurface = el('board');
+function finishDrag() {
+  if (!drag) return;
+  drag.ghost?.remove();
+  drag.source?.classList.remove('moving-source');
+  const pointer = drag.pointer;
+  drag = undefined;
+  if (boardSurface.hasPointerCapture(pointer)) boardSurface.releasePointerCapture(pointer);
+}
+boardSurface.addEventListener('pointerdown',event => {
+  suppressBoardClick = false;
+  if (!event.isPrimary || event.button !== 0 || busy || review || !state || state.result || state.solved || state.huff?.length) return;
+  const from = Number(event.target.closest('.cell')?.dataset.square);
+  if (!state.moves.some(move => move.from === from)) return;
+  drag = {pointer:event.pointerId,from,x:event.clientX,y:event.clientY};
+});
+boardSurface.addEventListener('pointermove',event => {
+  if (drag?.pointer !== event.pointerId) return;
+  if (!drag.ghost) {
+    if (Math.hypot(event.clientX-drag.x,event.clientY-drag.y) < 8) return;
+    selected = drag.from;
+    choice = [];
+    draw();
+    const source = cell(drag.from);
+    const figure = source.firstElementChild;
+    if (!figure) { finishDrag(); return; }
+    const rect = source.getBoundingClientRect();
+    const ghost = document.createElement('span');
+    ghost.className = 'moving-piece drag-piece'+(source.classList.contains('white') ? ' white' : '');
+    ghost.append(figure.cloneNode(true));
+    Object.assign(ghost.style,{width:rect.width+'px',height:rect.height+'px',fontSize:getComputedStyle(source).fontSize});
+    ghost.setAttribute('aria-hidden','true');
+    document.body.append(ghost);
+    Object.assign(drag,{ghost,source});
+    source.classList.add('moving-source');
+    boardSurface.setPointerCapture(event.pointerId);
+  }
+  drag.ghost.style.left = event.clientX+'px';
+  drag.ghost.style.top = event.clientY+'px';
+});
+boardSurface.addEventListener('pointerup',event => {
+  if (drag?.pointer !== event.pointerId) return;
+  const moving = Boolean(drag.ghost);
+  const target = document.elementFromPoint(event.clientX,event.clientY)?.closest('#board .cell');
+  finishDrag();
+  if (!moving) return;
+  suppressBoardClick = true;
+  if (target) select(Number(target.dataset.square));
+});
+boardSurface.addEventListener('pointercancel',finishDrag);
+boardSurface.addEventListener('lostpointercapture',event => {
+  if (event.target === boardSurface && drag?.pointer === event.pointerId) finishDrag();
+});
+boardSurface.addEventListener('pointerleave',event => {
+  if (drag?.pointer === event.pointerId && !drag.ghost) finishDrag();
+});
+boardSurface.addEventListener('click',event => {
+  if (!suppressBoardClick || event.detail === 0) return;
+  suppressBoardClick = false;
+  event.stopImmediatePropagation();
+},true);
 
 function menuTab(id) {
   for (const tab of ['play-tab','my-games','puzzle-tab']) {
@@ -693,8 +830,9 @@ el('opponent-history').onclick = () => perform(async () => {
 el('share-score').onclick = () => {
   if (!busy && state?.score) shareScore(state.invite.split('?')[0],labels[state.game],state.score);
 };
-el('rematch').onclick = () => perform(async () => {
+el('rematch').onclick = el('result-rematch').onclick = () => perform(async () => {
   const next = state.rematch ? state : await api('/'+state.id+'/rematch',{});
+  if (next.rematch && el('match-result').open) el('match-result').close();
   await show(next.rematch ? await api('/'+next.rematch) : next);
 });
 el('review').onclick = () => perform(() => showReview(0));
@@ -761,10 +899,12 @@ async function refreshMatch() {
   try {
     const next = await api('/'+snapshot.id);
     if (state !== snapshot || busy || review || document.hidden) return;
+    restoreConnection(next);
     const changed = ['version','ready','result','drawOffer','offer','rematch'].some(key => next[key] !== snapshot[key])
-      || JSON.stringify(next.score) !== JSON.stringify(snapshot.score);
+      || next.opponent?.name !== snapshot.opponent?.name || JSON.stringify(next.score) !== JSON.stringify(snapshot.score);
     if (changed) await perform(() => show(next));
   } catch (error) {
+    if (error.network && state === snapshot && !busy && !snapshot.result) lostConnection();
     if (error.status === 410 && state === snapshot && !busy && !review) {
       await perform(async () => {
         lobby();
