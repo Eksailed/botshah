@@ -122,6 +122,14 @@
       <button id="back">К выбору игры</button>
     </div>
   </section>
+  <dialog id="match-result" aria-labelledby="match-result-title" aria-describedby="match-result-reason">
+    <form method="dialog">
+      <h2 id="match-result-title"></h2>
+      <p id="match-result-reason" hidden></p>
+      <button class="brass" value="menu">В главное меню</button>
+      <button value="board" autofocus>Посмотреть доску</button>
+    </form>
+  </dialog>
   <p id="error" role="alert"></p>
 </main>
 </html>

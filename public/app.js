@@ -152,7 +152,23 @@ async function animateMove(move, capture) {
   }
 }
 
+function presentMatchResult(next) {
+  const sheet = el('match-result');
+  const outcome = next.result === 'draw' ? 'draw' : next.result === next.side ? 'win' : 'loss';
+  const reason = el('match-result-reason');
+  sheet.dataset.outcome = outcome;
+  sheet.returnValue = '';
+  el('match-result-title').textContent = {win:'Вы победили!',loss:'Вы проиграли',draw:'Ничья'}[outcome];
+  reason.textContent = reasons[next.reason] ?? '';
+  reason.hidden = !reason.textContent;
+  if (!sheet.open) sheet.showModal();
+}
+el('match-result').onclose = () => {
+  if (el('match-result').returnValue === 'menu') lobby();
+};
+
 async function show(next) {
+  const finished = Boolean(!next.task && next.result && state?.id === next.id && !state.result);
   const delta = next.version-state?.version;
   if (state?.id === next.id && delta > 0 && !document.hidden) {
     const frames = next.game === 'draughts' && next.replay?.length >= delta ? next.replay.slice(-delta)
@@ -220,6 +236,7 @@ async function show(next) {
   actions();
   draw();
   scheduleComputer();
+  if (finished) presentMatchResult(next);
 }
 
 function actions() {
