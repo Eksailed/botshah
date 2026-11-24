@@ -749,14 +749,31 @@ if (!tg?.initData) {
     perform(async () => show(await api('',{game:invite})));
   }
   setInterval(drawClocks,250);
-  setInterval(() => {
-    if (state && !state.task && !state.training && !review && !document.hidden && (!state.result || !state.rematch)) {
-      perform(async () => {
-        const next = await api('/'+state.id);
-        if (next.version !== state.version || next.ready !== state.ready || next.result !== state.result || next.drawOffer !== state.drawOffer || next.offer !== state.offer || next.rematch !== state.rematch || JSON.stringify(next.score) !== JSON.stringify(state.score)) await show(next);
+  setInterval(refreshMatch,2000);
+}
+
+let refreshingMatch = false;
+async function refreshMatch() {
+  if (refreshingMatch || busy || !state || state.task || state.training || review ||
+      document.hidden || (state.result && state.rematch)) return;
+  const snapshot = state;
+  refreshingMatch = true;
+  try {
+    const next = await api('/'+snapshot.id);
+    if (state !== snapshot || busy || review || document.hidden) return;
+    const changed = ['version','ready','result','drawOffer','offer','rematch'].some(key => next[key] !== snapshot[key])
+      || JSON.stringify(next.score) !== JSON.stringify(snapshot.score);
+    if (changed) await perform(() => show(next));
+  } catch (error) {
+    if (error.status === 410 && state === snapshot && !busy && !review) {
+      await perform(async () => {
+        lobby();
+        throw error;
       });
     }
-  },2000);
+  } finally {
+    refreshingMatch = false;
+  }
 }
 
 const clubArt = new Image();
