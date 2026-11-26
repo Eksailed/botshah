@@ -800,7 +800,6 @@ for (const button of document.querySelectorAll('[data-game]')) {
     setupGame = button.dataset.game;
     el('setup-title').textContent = labels[setupGame];
     el('opponent-mode').value = 'friend';
-    el('naval-mode-label').hidden=el('naval-mode').hidden=setupGame!=='battleship';
     updateSetupClock();
     el('setup').returnValue = '';
     el('setup').showModal();
@@ -814,7 +813,7 @@ el('setup').onclose = () => {
   if (el('setup').returnValue !== 'create') return;
     const mode = el('opponent-mode').value;
   perform(async () => show(await api('',{game:setupGame,clock:mode === 'friend' && setupGame !== 'battleship' ? el('clock-mode').value : 'none',
-    mode:setupGame === 'battleship' ? el('naval-mode').value : undefined,training:mode === 'friend' ? null : mode})));
+    training:mode === 'friend' ? null : mode})));
 };
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));

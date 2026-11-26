@@ -4,8 +4,8 @@ import { roomId } from './play.js';
 import { fail } from './telegram.js';
 
 const opposite = side => side === 'w' ? 'b' : 'w';
-function freshState(mode, training) {
-  let state = createBattle(mode);
+function freshState(training) {
+  let state = createBattle('classic');
   if (training === 'local') Object.assign(state,{localSide:'w',localReady:false});
   if (training && training !== 'local') {
     const fleet = autoFleet();
@@ -22,7 +22,7 @@ export async function battleshipAPI(request, env, user, input, id, action) {
     if (!['classic','arsenal'].includes(input.mode ?? 'classic')) fail(400,'Выберите правила');
     if (input.clock && input.clock !== 'none') fail(400,'Морской бой идёт без часов');
     id = roomId();
-    const state = freshState(input.mode ?? 'classic',training);
+    const state = freshState(training);
     await db.batch([
       db.prepare("INSERT INTO rooms(id,game,white,black,training,clock,rules,turn,updated_at) VALUES (?,'battleship',?,?,?,'none','huff',?,?)").bind(id,user,training ? 0 : null,training,state.turn,Date.now()),
       db.prepare('INSERT INTO battleship_states(room_id,version,state) VALUES (?,?,?)').bind(id,state.version,JSON.stringify(state))
@@ -37,11 +37,20 @@ export async function battleshipAPI(request, env, user, input, id, action) {
   const ownerSide = row.white === user ? 'w' : row.black === user ? 'b' : fail(403,'Комната занята');
   let stored = await db.prepare('SELECT * FROM battleship_states WHERE room_id=?').bind(id).first();
   if (!stored) {
-    const initial = freshState('classic',row.training);
+    const initial = freshState(row.training);
     await db.prepare('INSERT OR IGNORE INTO battleship_states(room_id,version,state) VALUES (?,?,?)').bind(id,initial.version,JSON.stringify(initial)).run();
     stored = await db.prepare('SELECT * FROM battleship_states WHERE room_id=?').bind(id).first();
   }
   let state = JSON.parse(stored.state);
+  // Старые партии продолжаются с уже сделанными выстрелами по классическим правилам.
+  if(state.mode === 'arsenal') {
+    state.mode='classic';
+    for(const player of Object.values(state.players)) {
+      player.mine=null;player.blocked=false;player.scans=[];
+      player.stock={plane:0,torpedo:0,scan:0};
+    }
+    if(state.lastAction && state.lastAction.kind !== 'shot')state.lastAction=null;
+  }
   const local = row.training === 'local';
   const side = local ? state.localSide : ownerSide;
   if (state.result === 'cancelled') fail(410,'Партия отозвана');
@@ -49,7 +58,7 @@ export async function battleshipAPI(request, env, user, input, id, action) {
   if (action && !post) fail(405,'Используйте POST');
   if (action === 'rematch') {
     if (!state.result || row.black === null) fail(403,'Сначала закончите партию');
-    const nextId = roomId(), next = freshState(state.mode,row.training);
+    const nextId = roomId(), next = freshState(row.training);
     await db.batch([
       db.prepare("INSERT OR IGNORE INTO rooms(id,game,white,black,training,clock,rules,turn,previous,updated_at) VALUES (?,'battleship',?,?,?,'none','huff',?,?,?)").bind(nextId,row.white,row.black,row.training,next.turn,id,Date.now()),
       db.prepare('INSERT OR IGNORE INTO battleship_states(room_id,version,state) SELECT id,?,? FROM rooms WHERE id=?').bind(next.version,JSON.stringify(next),nextId)

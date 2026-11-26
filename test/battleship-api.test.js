@@ -78,3 +78,12 @@ test('Одновременные атаки изменяют версию тол
   assert.equal(current.version,a.version+1);assert.equal(current.shots.length,1);
  }finally{sql.close()}
 });
+test('Арсенал временно отключён в новых и ранее созданных партиях',async()=>{
+ const {call,sql}=fixture();try {
+  let a=await call(11,{mode:'arsenal'});assert.equal(a.mode,'classic');
+  const stored=sql.prepare('SELECT state FROM battleship_states WHERE room_id=?').get(a.id);
+  const legacy=JSON.parse(stored.state);legacy.mode='arsenal';legacy.players.w.mine=99;legacy.players.w.blocked=true;legacy.players.w.scans=[{cell:0,count:2}];
+  sql.prepare('UPDATE battleship_states SET state=? WHERE room_id=?').run(JSON.stringify(legacy),a.id);
+  a=await call(11,{},a.id,undefined,'GET');assert.equal(a.mode,'classic');assert.equal(a.mine,null);assert.equal(a.blocked,false);assert.deepEqual(a.scans,[]);
+ }finally{sql.close()}
+});
