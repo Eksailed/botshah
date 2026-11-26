@@ -1,3 +1,4 @@
+import { navalComputerMove } from './battleship-ai.js';
 import { createBattle, autoFleet, act, playerView } from './battleship.js';
 import { roomId } from './play.js';
 import { fail } from './telegram.js';
@@ -71,12 +72,7 @@ export async function battleshipAPI(request, env, user, input, id, action) {
         state.phase = 'finished';state.version++;
       } else if (action === 'computer') {
         if (!row.training || local || state.turn !== 'b' || state.phase !== 'battle') fail(403,'Сейчас ход игрока');
-        const view = playerView(state,'b');
-        const targets = Array.from({length:100}, (_,i) => i).filter(cell => !view.shots.some(s => s.cell === cell));
-        const hits = view.shots.filter(s => s.hit && !view.sunk.flat().includes(s.cell));
-        const near = targets.filter(cell => hits.some(hit => Math.abs(cell-hit.cell) === 10 || (Math.floor(cell/10) === Math.floor(hit.cell/10) && Math.abs(cell-hit.cell) === 1)));
-        const choices = row.training === 'normal' && near.length ? near : targets;
-        state = act(state,'b',{kind:'shot',cell:choices[Math.floor(Math.random()*choices.length)]});
+        state = act(state,'b',navalComputerMove(playerView(state,'b'),row.training));
       } else {
         if (local && !state.localReady) fail(403,'Подтвердите передачу телефона');
         if (row.black === null && input.kind !== 'place') fail(403,'Ждём соперника');
