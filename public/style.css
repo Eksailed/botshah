@@ -858,3 +858,8 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-ship-model.destroyed { opacity:.7; }
 
 #naval-game::-webkit-scrollbar { display:none; width:0; height:0; }
+
+/* Ловушки принадлежат владельцу поля и не перекрывают касания клеток. */
+.naval-bomb{position:absolute;width:54%;height:54%;left:23%;top:28%;border-radius:50%;background:radial-gradient(circle at 32% 28%,#79715b,#272c28 48%,#111b17 80%);border:1px solid #e5bd6e;box-shadow:0 2px 3px #0009;pointer-events:none;z-index:4}
+.naval-bomb:before{content:'';position:absolute;width:27%;height:24%;left:55%;top:-21%;border-top:2px solid #f1cd85;border-right:2px solid #f1cd85;border-radius:0 70% 0 0;transform:rotate(-25deg)}
+.naval-controls button[aria-pressed=true]{background:linear-gradient(#f6dda0,#c69a4c);color:#172c23;border-color:#e7c77d}

@@ -1,4 +1,4 @@
-import {animateNavalAttack,animateNavalPlacement} from './naval-animation.js';
+import {animateNavalAttack,animateNavalPlacement,animateNavalBombs} from './naval-animation.js';
 const shipAtlas = new Image();
 shipAtlas.src='/naval-ships.png';
 const shipCrops = {
@@ -29,6 +29,7 @@ function shipCount(count) {
 function attackMessage(state) {
   const last=state.lastAction;
   if(!last)return '';
+  if(last.bombExplosions?.length)return 'Бомба! Ответный взрыв · ловушек сработало: '+last.bombExplosions.length;
   const incoming=last.side!==state.side;
   const prefix=incoming?'Соперник · ':'';
   if(last.kind==='scan') {
@@ -45,6 +46,7 @@ function attackMessage(state) {
 }
 export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   let state, own=false, tool='shot', origin=null, direction='horizontal', edge='top';
+  let bombs=[], placementTool='ships';
   let fleet=[], mine=null, timer, busy=false, active=false, generation=0, message='';
   let animating=false, selectedShip;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -130,14 +132,21 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     return [origin];
   }
   function fits(ship,index) {
-    return ship.every(cell=>cell>=0&&cell<100)&&!ship.some(cell=>fleet.some((other,i)=>i!==index&&other.some(old=>Math.abs(cell%10-old%10)<=1&&Math.abs(Math.floor(cell/10)-Math.floor(old/10))<=1)));
+    return ship.every(cell=>cell>=0&&cell<100&&!bombs.includes(cell))&&!ship.some(cell=>fleet.some((other,i)=>i!==index&&other.some(old=>Math.abs(cell%10-old%10)<=1&&Math.abs(Math.floor(cell/10)-Math.floor(old/10))<=1)));
   }
   function invalidPlacement(ship) {
-    message='Корабль выходит за край или касается другого';draw();
+    message='Корабль выходит за край, касается другого или перекрывает бомбу';draw();
     for(const cell of ship){const element=root.querySelector('[data-cell="'+cell+'"]');if(element)element.classList.add('naval-invalid');}
     if(!reduced.matches)root.querySelector('.naval-board')?.animate([{transform:'translateX(0)'},{transform:'translateX(-3px)'},{transform:'translateX(3px)'},{transform:'translateX(0)'}],{duration:180});
   }
   function place(cell) {
+    if(placementTool==='bombs') {
+      if(bombs.includes(cell)){bombs=bombs.filter(value=>value!==cell);message='';}
+      else if(fleet.flat().includes(cell))message='На корабль бомбу ставить нельзя';
+      else if(bombs.length===3)message='Можно поставить не больше 3 бомб';
+      else {bombs.push(cell);message='';}
+      draw();return;
+    }
     const existing=fleet.findIndex(ship=>ship.includes(cell));
     if(existing!==-1){selectedShip=existing;direction=fleet[existing].length>1&&fleet[existing][1]-fleet[existing][0]===10?'vertical':'horizontal';message='Корабль выбран. Коснитесь новой клетки или нажмите «Повернуть»';draw();return;}
     const index=selectedShip??fleet.length,size=sizes[index];
@@ -230,10 +239,22 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     if (message) root.append(node('p',message,'naval-message'));
     const controls=node('div',null,'naval-controls');
     if (setup) {
-      controls.append(button('Авторасстановка',()=>{selectedShip=undefined;fleet=randomFleet();mine=Array.from({length:100},(_,i)=>i).find(cell=>!fleet.flat().includes(cell));message='';draw();for(const model of root.querySelectorAll('.naval-ship-model'))animateNavalPlacement(model,reduced.matches);}),
+      if(state.bombsEnabled){
+        const modes=node('div',null,'naval-controls');
+        for(const [value,label] of [['ships','Корабли'],['bombs','Бомбы · '+bombs.length+'/3']]){
+          const choice=button(label,()=>{placementTool=value;selectedShip=undefined;message='';draw();});
+          choice.setAttribute('aria-pressed',String(placementTool===value));modes.append(choice);
+        }
+        modes.append(button('Расставить 3 бомбы',()=>{
+          const empty=Array.from({length:100},(_,cell)=>cell).filter(cell=>!fleet.flat().includes(cell));
+          bombs=[];for(let i=0;i<3;i++)bombs.push(empty.splice(Math.floor(Math.random()*empty.length),1)[0]);
+          placementTool='bombs';message='';draw();
+        }));root.append(modes);
+      }
+      controls.append(button('Авторасстановка',()=>{selectedShip=undefined;fleet=randomFleet(bombs);mine=Array.from({length:100},(_,i)=>i).find(cell=>!fleet.flat().includes(cell));message='';draw();for(const model of root.querySelectorAll('.naval-ship-model'))animateNavalPlacement(model,reduced.matches);}),
         button(direction==='horizontal'?'Повернуть ↕':'Повернуть ↔',rotateShip),
-        button('Сбросить',()=>{fleet=[];mine=null;selectedShip=undefined;draw();}));
-      root.append(controls,node('p',fleet.length<10?'Разместите корабль · '+sizes[fleet.length]+' палуб. Готово '+fleet.length+'/10':state.mode==='arsenal'?'Коснитесь пустой клетки для мины':'Флот готов','naval-help'));
+        button('Сбросить',()=>{fleet=[];bombs=[];mine=null;selectedShip=undefined;draw();}));
+      root.append(controls,node('p',placementTool==='bombs'?'Коснитесь пустой клетки. Повторное нажатие убирает бомбу. Можно играть без бомб.':fleet.length<10?'Разместите корабль · '+sizes[fleet.length]+' палуб. Готово '+fleet.length+'/10':state.mode==='arsenal'?'Коснитесь пустой клетки для мины':'Флот готов','naval-help'));
     } else {
       controls.append(button(own?'Поле противника':'Мой флот',()=>{own=!own;origin=null;draw();}));
       root.append(controls);
@@ -271,6 +292,10 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
           if(setup)place(cell);
           else {origin=cell;message='';draw();}
         },'naval-cell');
+        if(self&&(setup?bombs:state.bombs??[]).includes(cell)){
+          const bomb=node('span',null,'naval-bomb');bomb.setAttribute('aria-hidden','true');element.append(bomb);
+          element.setAttribute('title','Ваша бомба');
+        }
         element.dataset.cell=cell;
         element.style.gridArea=(row+2)+' / '+(col+2);
         element.disabled=busy||animating || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&(shots.has(cell)||water.has(cell)));
@@ -308,7 +333,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     root.append(board);
     const actions=node('div',null,'naval-actions');
     if(setup) {
-      const ready=button(busy?'Сохраняем…':'Флот готов',()=>submit({kind:'place',fleet,mine}),'brass');
+      const ready=button(busy?'Сохраняем…':'Флот готов',()=>submit({kind:'place',fleet,mine,bombs}),'brass');
       ready.disabled=busy||animating||fleet.length!==10||state.mode==='arsenal'&&mine===null;actions.append(ready);
     } else if(state.phase==='battle'&&!own&&!state.result) {
       if(tool==='plane')actions.append(button(direction==='horizontal'?'Атака по горизонтали':'Атака по вертикали',()=>{direction=direction==='horizontal'?'vertical':'horizontal';draw();}));
@@ -350,17 +375,25 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         if(!presentation.shots.some(shot=>shot.cell===cell))presentation.shots.push({cell,hit:Boolean(next.lastAction.hitCount)});
       }
       for(const ship of next.lastAction.sunkShips??[])presentation.sunk.push(ship);
+      for(const wave of next.lastAction.bombExplosions??[]){
+        if(wave.side===previous.side){
+          for(const cell of wave.hitCells){const shot=presentation.shots.find(item=>item.cell===cell);if(shot)shot.hit=true;else presentation.shots.push({cell,hit:true});}
+          for(const ship of wave.sunkShips)if(!presentation.sunk.some(old=>old.join()===ship.join()))presentation.sunk.push(ship);
+        }else for(const cell of wave.hitCells)if(!presentation.incoming.includes(cell))presentation.incoming.push(cell);
+        if(wave.owner===previous.side)presentation.bombs=(presentation.bombs??[]).filter(cell=>cell!==wave.cell);
+      }
       const sunkCells=presentation.sunk.flat();
       presentation.water=Array.from({length:100},(_,cell)=>cell).filter(cell=>!sunkCells.includes(cell)&&sunkCells.some(deck=>Math.abs(cell%10-deck%10)<=1&&Math.abs(Math.floor(cell/10)-Math.floor(deck/10))<=1));
       state=presentation;animating=true;origin=null;draw();
       try {
         await animateNavalAttack({root,before:previous,after:presentation,own,reduced:reduced.matches,valid:()=>active&&generation===currentGeneration,onImpact:()=>sound(next.lastAction.hitCount?'hit':'splash')});
+        await animateNavalBombs({root,after:presentation,own,reduced:reduced.matches,valid:()=>active&&generation===currentGeneration,onBlast:()=>sound('hit')});
       } catch {} finally {if(generation===currentGeneration)animating=false;}
       if(!active||generation!==currentGeneration)return;
     }
     const changed=!previous||next.id!==previous.id||next.version!==previous.version||next.ready!==previous.ready;
     if (!active) {active=true;generation++;}
-    if (next.id!==previous?.id || next.side!==previous?.side) {fleet=[];mine=null;selectedShip=undefined;own=false;tool='shot';}
+    if (next.id!==previous?.id || next.side!==previous?.side) {fleet=[];bombs=[];placementTool='ships';mine=null;selectedShip=undefined;own=false;tool='shot';}
     state=next;
     if(changed)origin=null;
     onUpdate(next);
@@ -373,6 +406,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
       try {
         await animateNavalAttack({root,before:previous,after:next,own,reduced:reduced.matches,valid:()=>active&&generation===currentGeneration&&state===next,
           onImpact:()=>sound(last.kind==='scan'?'scan':last.hitCount?'hit':'splash')});
+        await animateNavalBombs({root,after:next,own,reduced:reduced.matches,valid:()=>active&&generation===currentGeneration&&state===next,onBlast:()=>sound('hit')});
       } catch {
         // Полученная серверная позиция остаётся доступной при сбое визуального эффекта.
       } finally {
@@ -390,13 +424,14 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   document.addEventListener('visibilitychange',()=>{if(active&&!document.hidden)schedule();});
   return {load,stop};
 }
-function randomFleet() {
+function randomFleet(excluded=[]) {
   for(;;) {
     const result=[];
     for(const size of sizes) {
       const options=[];
       for(let cell=0;cell<100;cell++)for(const step of [1,10]) {
         const ship=Array.from({length:size},(_,i)=>cell+i*step);
+        if(ship.some(cell=>excluded.includes(cell)))continue;
         if(ship.at(-1)>=100||step===1&&Math.floor(ship.at(-1)/10)!==Math.floor(cell/10))continue;
         if(ship.some(n=>result.flat().some(old=>Math.abs(n%10-old%10)<=1&&Math.abs(Math.floor(n/10)-Math.floor(old/10))<=1)))continue;
         options.push(ship);

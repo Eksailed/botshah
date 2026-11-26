@@ -1,5 +1,5 @@
 import { navalComputerMove } from './battleship-ai.js';
-import { createBattle, autoFleet, act, playerView } from './battleship.js';
+import { createBattle, autoFleet, autoBombs, act, playerView } from './battleship.js';
 import { roomId } from './play.js';
 import { fail } from './telegram.js';
 
@@ -10,7 +10,7 @@ function freshState(training,turnRule='until-miss') {
   if (training && training !== 'local') {
     const fleet = autoFleet();
     const mine = Array.from({length:100}, (_,i) => i).find(cell => !fleet.flat().includes(cell));
-    state = act(state,'b',{kind:'place',fleet,mine});
+    state = act(state,'b',{kind:'place',fleet,mine,bombs:autoBombs(fleet)});
   }
   return state;
 }

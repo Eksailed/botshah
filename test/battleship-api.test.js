@@ -93,3 +93,24 @@ test('Арсенал временно отключён в новых и ране
   a=await call(11,{},a.id,undefined,'GET');assert.equal(a.mode,'classic');assert.equal(a.mine,null);assert.equal(a.blocked,false);assert.deepEqual(a.scans,[]);
  }finally{sql.close()}
 });
+
+test('Ловушки сохраняются приватно, повтор выстрела не повторяет ответный взрыв',async()=>{
+ const {call,sql}=fixture();try{
+  let a=await call(11,{mode:'classic'});const id=a.id;
+  await call(22,{},id,'join');
+  const first=autoFleet(),second=autoFleet();
+  const target=Array.from({length:100},(_,i)=>i).find(cell=>!second.flat().includes(cell));
+  a=await call(11,{kind:'place',fleet:first,bombs:[],version:a.version},id,'move');
+  a=await call(22,{kind:'place',fleet:second,bombs:[target],version:a.version},id,'move');
+  const state=JSON.parse(sql.prepare('SELECT state FROM battleship_states WHERE room_id=?').get(id).state);state.turn='w';
+  sql.prepare('UPDATE battleship_states SET state=? WHERE room_id=?').run(JSON.stringify(state),id);
+  const before=await call(11,{},id,undefined,'GET');assert.equal(before.bombsEnabled,true);assert.deepEqual(before.bombs,[]);assert.equal(before.enemyBombs,undefined);
+  const next=await call(11,{kind:'shot',cell:target,version:before.version},id,'move');
+  assert.equal(next.lastAction.bombExplosions.length,1);assert.deepEqual(next.enemySpentBombs,[target]);
+  await assert.rejects(call(11,{kind:'shot',cell:target,version:before.version},id,'move'),{status:409});
+  assert.equal((await call(11,{},id,undefined,'GET')).version,next.version);
+  const legacy=JSON.parse(sql.prepare('SELECT state FROM battleship_states WHERE room_id=?').get(id).state);delete legacy.bombRules;
+  sql.prepare('UPDATE battleship_states SET state=? WHERE room_id=?').run(JSON.stringify(legacy),id);
+  assert.equal((await call(11,{},id,undefined,'GET')).bombsEnabled,false);
+ }finally{sql.close()}
+});

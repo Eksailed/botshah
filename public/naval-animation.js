@@ -93,3 +93,17 @@ export function animateNavalPlacement(model,reduced,from,rotation=0) {
   const y=from?from.y+from.height/2-rect.y-rect.height/2:-7;
   model.animate([{transform:'translate('+x+'px,'+y+'px) rotate('+rotation+'deg) scale(.94)',opacity:.6},{transform:'translate(0,0) rotate(0) scale(1)',opacity:1}],{duration:180,easing:'ease-out'});
 }
+export async function animateNavalBombs({root,after,own,reduced,valid,onBlast}) {
+  for(const wave of after.lastAction?.bombExplosions??[]) {
+    if(!valid())return;
+    onBlast?.();
+    if(reduced||document.hidden)continue;
+    const victim=wave.owner==='w'?'b':'w';
+    const visible=own?victim===after.side:victim!==after.side;
+    const elements=visible?wave.targets.map(cell=>root.querySelector('.naval-board [data-cell="'+cell+'"]')):
+      victim===after.side?wave.targets.map(cell=>root.querySelector('.naval-mini-map [data-cell="'+cell+'"]')):[];
+    const animations=[];
+    for(const element of elements.filter(Boolean))play(element,[{filter:'brightness(1)',boxShadow:'inset 0 0 0 transparent'},{filter:'brightness(2.5)',boxShadow:'inset 0 0 18px #ffb34d'},{filter:'brightness(1)',boxShadow:'inset 0 0 0 transparent'}],{duration:380},animations);
+    await Promise.allSettled(animations.map(animation=>animation.finished));
+  }
+}
