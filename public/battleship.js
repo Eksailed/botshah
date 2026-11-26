@@ -1,0 +1,272 @@
+const sizes = [4,3,3,2,2,2,1,1,1,1];
+const letters = 'АБВГДЕЖЗИК';
+const coordinate = cell => letters[cell%10]+(Math.floor(cell/10)+1);
+const toolNames = {shot:'Выстрел',plane:'Самолёт',torpedo:'Подлодка',scan:'Сканер'};
+
+export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
+  let state, own=false, tool='shot', origin=null, direction='horizontal', edge='top';
+  let fleet=[], mine=null, timer, busy=false, active=false, generation=0, message='';
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  function node(tag,text,className) {
+    const element = document.createElement(tag);
+    if (text) element.textContent=text;
+    if (className) element.className=className;
+    return element;
+  }
+  function button(text,action,className='') {
+    const element=node('button',text,className);
+    element.type='button';element.onclick=action;element.disabled=busy;
+    return element;
+  }
+  function sound(kind) { try { onSound?.(kind); } catch {} }
+  function schedule() {
+    clearTimeout(timer);
+    if (!active || state?.result || state?.handoff || state?.training==='local') return;
+    timer=setTimeout(async()=>{
+      if (busy || document.hidden) { schedule();return; }
+      const computer=state.training && state.phase==='battle' && state.turn==='b';
+      if (state.training && !computer) return;
+      await run(()=>api('/'+state.id+(computer?'/computer':''),computer?{version:state.version}:undefined));
+    },1500);
+  }
+  async function run(action) {
+    if (busy || !active) return;
+    busy=true;message='';draw();
+    const currentGeneration=generation;
+    try {
+      const next=await action();
+      if (active && generation===currentGeneration && next) await load(next);
+    } catch(error) {
+      if (!active || generation!==currentGeneration) return;
+      message=error.message;
+      if (error.status===409) {
+        try { await load(await api('/'+state.id)); } catch {}
+      }
+    } finally {
+      if (active && generation===currentGeneration) { busy=false;draw();schedule(); }
+    }
+  }
+  function submit(data) { return run(()=>api('/'+state.id+'/move',{...data,version:state.version})); }
+  function stop() { active=false;busy=false;generation++;clearTimeout(timer); }
+  async function leave() {
+    if (busy) return;
+    if (state.training==='local' && !state.result && !state.handoff) {
+      await run(()=>api('/'+state.id+'/suspend',{version:state.version}));
+    }
+    stop();onMenu();
+  }
+  function preview() {
+    if (origin===null) return [];
+    if (tool==='scan') {
+      if (origin%10>7 || Math.floor(origin/10)>7) return [];
+      return Array.from({length:9},(_,i)=>origin+Math.floor(i/3)*10+i%3);
+    }
+    if (tool==='plane') {
+      if (direction==='horizontal' && origin%10>7 || direction==='vertical' && origin>79) return [];
+      return [origin,origin+(direction==='horizontal'?1:10),origin+(direction==='horizontal'?2:20)];
+    }
+    if (tool==='torpedo') {
+      const vertical=edge==='top'||edge==='bottom';
+      const reverse=edge==='bottom'||edge==='right';
+      const start=vertical?(reverse?90:0)+origin%10:Math.floor(origin/10)*10+(reverse?9:0);
+      return Array.from({length:10},(_,i)=>start+i*(vertical?10:1)*(reverse?-1:1));
+    }
+    return [origin];
+  }
+  function place(cell) {
+    const size=sizes[fleet.length];
+    if (!size) {
+      if (fleet.flat().includes(cell)) { message='Мина должна быть в пустой клетке';draw();return; }
+      mine=cell;draw();return;
+    }
+    const ship=Array.from({length:size},(_,i)=>cell+i*(direction==='horizontal'?1:10));
+    if (ship.some(n=>n>=100 || direction==='horizontal' && Math.floor(n/10)!==Math.floor(cell/10)) ||
+        ship.some(n=>fleet.flat().some(old=>Math.abs(n%10-old%10)<=1 && Math.abs(Math.floor(n/10)-Math.floor(old/10))<=1))) {
+      message='Корабль выходит за край или касается другого';draw();return;
+    }
+    fleet.push(ship);message='';draw();
+  }
+  async function copyInvite() {
+    try { await navigator.clipboard.writeText(state.invite);message='Ссылка скопирована'; }
+    catch { message=state.invite; }
+    draw();
+  }
+  function draw() {
+    if (!state || !active) return;
+    root.replaceChildren();
+    if (state.handoff) {
+      const panel=node('div',null,'naval-handoff');
+      panel.append(node('span','⚓','naval-anchor'),node('h2','Передайте телефон'),
+        node('p',(state.side==='w'?'Первый':'Второй')+' игрок, откройте своё поле'),
+        button(busy?'Открываем…':'Я готов',()=>run(()=>api('/'+state.id+'/handoff',{version:state.version})),'brass'));
+      root.append(panel);return;
+    }
+    const setup=state.phase==='setup'&&!state.placed;
+    const yours=state.training==='local'?(state.side==='w'?'Первый игрок':'Второй игрок'):'Вы';
+    const opponent=state.training==='local'?(state.side==='w'?'Второй игрок':'Первый игрок'):state.training?'Компьютер':state.opponent||'Соперник';
+    const status=state.result ? state.result==='cancelled'?'Партия отозвана':state.training==='local'?(state.result==='w'?'Первый':'Второй')+' игрок победил':state.result===state.side?'Вы победили!':'Вы проиграли'
+      : setup?'Расстановка флота':state.phase==='setup'?'Ждём расстановку соперника':state.turn===state.side?'Ваш ход':'Ход соперника';
+    const heading=node('div',null,'naval-heading');
+    heading.append(node('strong',status),node('span',state.mode==='arsenal'?'Арсенал':'Классика'));
+    root.append(heading);
+    if (!setup) {
+      const summary=node('div',null,'naval-fleets');
+      const lost=(state.fleet??[]).filter(ship=>ship.every(cell=>state.incoming.includes(cell))).length;
+      summary.append(node('span',yours+' · '+(10-lost)+' кораблей'),node('span',opponent+' · '+(10-state.sunk.length)+' кораблей'));
+      root.append(summary);
+    }
+    if (message) root.append(node('p',message,'naval-message'));
+    const controls=node('div',null,'naval-controls');
+    if (setup) {
+      controls.append(button('Авторасстановка',()=>{fleet=randomFleet();mine=Array.from({length:100},(_,i)=>i).find(cell=>!fleet.flat().includes(cell));message='';draw();}),
+        button(direction==='horizontal'?'Повернуть ↕':'Повернуть ↔',()=>{direction=direction==='horizontal'?'vertical':'horizontal';draw();}),
+        button('Сбросить',()=>{fleet=[];mine=null;draw();}));
+      root.append(controls,node('p',fleet.length<10?'Разместите корабль · '+sizes[fleet.length]+' палуб. Готово '+fleet.length+'/10':state.mode==='arsenal'?'Коснитесь пустой клетки для мины':'Флот готов','naval-help'));
+    } else {
+      controls.append(button(own?'Поле противника':'Мой флот',()=>{own=!own;origin=null;draw();}));
+      root.append(controls);
+      if (state.mode==='arsenal' && !own && state.phase==='battle') {
+        const tools=node('div',null,'naval-tools');
+        for(const [kind,name] of Object.entries(toolNames)) {
+          const element=button(name+(kind==='shot'?'':' · '+state.stock[kind]),()=>{tool=kind;origin=null;message='';draw();});
+          element.dataset.tool=kind;element.setAttribute('aria-pressed',String(tool===kind));
+          element.disabled=busy || kind!=='shot'&&(state.blocked||!state.stock[kind]);
+          tools.append(element);
+        }
+        root.append(tools);
+        if (state.blocked) root.append(node('p','Мина заблокировала усиления на один ход','naval-help'));
+      }
+    }
+    const self=setup||own||state.phase==='setup';
+    const visibleFleet=setup?fleet:state.fleet??[];
+    const shots=new Map(state.shots.map(s=>[s.cell,s]));
+    const aim=preview();
+    const board=node('div',null,'naval-board');
+    board.setAttribute('aria-label',self?'Своё поле':'Поле соперника');
+    board.append(node('span',''));
+    for(const letter of letters)board.append(node('span',letter,'naval-coordinate'));
+    for(let row=0;row<10;row++) {
+      board.append(node('span',String(row+1),'naval-coordinate'));
+      for(let col=0;col<10;col++) {
+        const cell=row*10+col, shot=shots.get(cell), occupied=visibleFleet.flat().includes(cell);
+        const incoming=state.incoming.includes(cell);
+        const hit=self?incoming&&occupied:shot?.hit;
+        const sunk=!self&&state.sunk.flat().includes(cell);
+        const element=button(self?(incoming?(occupied?'✕':'·'):occupied?'':cell===(setup?mine:state.mine)?'◆':''):(shot?(shot.hit?'✕':'·'):''),()=>{
+          if(setup)place(cell);
+          else {origin=cell;message='';draw();}
+        },'naval-cell');
+        element.dataset.cell=cell;
+        element.disabled=busy || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&shots.has(cell));
+        element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':shot?'Промах':'Клетка'));
+        element.classList.toggle('ship',self&&occupied||sunk||Boolean(state.result&&!self&&state.enemyFleet?.flat().includes(cell)));
+        element.classList.toggle('hit',Boolean(hit));element.classList.toggle('sunk',sunk);
+        element.classList.toggle('aim',!self&&aim.includes(cell));
+        board.append(element);
+      }
+    }
+    root.append(board);
+    const actions=node('div',null,'naval-actions');
+    if(setup) {
+      const ready=button(busy?'Сохраняем…':'Флот готов',()=>submit({kind:'place',fleet,mine}),'brass');
+      ready.disabled=busy||fleet.length!==10||state.mode==='arsenal'&&mine===null;actions.append(ready);
+    } else if(state.phase==='battle'&&!own&&!state.result) {
+      if(tool==='plane')actions.append(button(direction==='horizontal'?'Атака по горизонтали':'Атака по вертикали',()=>{direction=direction==='horizontal'?'vertical':'horizontal';draw();}));
+      if(tool==='torpedo') {
+        const select=node('select');select.setAttribute('aria-label','Край запуска торпеды');
+        for(const [value,label]of Object.entries({top:'Сверху',bottom:'Снизу',left:'Слева',right:'Справа'})) {
+          const option=node('option',label);option.value=value;option.selected=edge===value;select.append(option);
+        }
+        select.onchange=()=>{edge=select.value;draw();};actions.append(select);
+      }
+      const fire=button(busy?'Отправляем…':origin===null?'Выберите цель':toolNames[tool]+' · '+coordinate(aim[0]??origin),()=>submit({kind:tool,cell:aim[0],direction,edge}),'brass');
+      fire.disabled=busy||!aim.length||state.turn!==state.side;actions.append(fire);
+    }
+    root.append(actions);
+    if(state.scans.length&&!own)root.append(node('p',state.scans.map(scan=>coordinate(scan.cell)+' · '+scan.count+' целых палуб, ход '+scan.version).join(' / '),'naval-help'));
+    if(!state.ready)root.append(button('Пригласить друга',copyInvite,'brass'));
+    if(state.score)root.append(node('p','Счёт с другом · '+state.score.wins+' : '+state.score.losses,'naval-help'));
+    if(state.result) {
+      const result=node('div',null,'naval-result');result.setAttribute('role','status');
+      result.append(node('h2',status),button('Реванш',()=>run(async()=>{const {rematch}=await api('/'+state.id+'/rematch',{});return api('/'+rematch);}), 'brass'),button('В главное меню',leave));
+      root.append(result);
+    } else {
+      const footer=node('div',null,'naval-footer');
+      footer.append(button('В главное меню',leave),button(state.phase==='setup'||state.training==='local'?'Отозвать':'Сдаться',()=>{
+        if(confirm(state.phase==='setup'||state.training==='local'?'Отозвать эту партию?':'Сдаться в этой партии?'))run(async()=>{
+          await api('/'+state.id+'/close',{version:state.version,intent:state.phase==='setup'||state.training==='local'?'withdraw':'resign'});stop();onMenu();return null;
+        });
+      }));root.append(footer);
+    }
+  }
+  async function load(next) {
+    if (!next) return;
+    const previous=state;
+    const changed=!previous||next.id!==previous.id||next.version!==previous.version||next.ready!==previous.ready;
+    if (!active) {active=true;generation++;}
+    if (next.id!==previous?.id || next.side!==previous?.side) {fleet=[];mine=null;own=false;tool='shot';}
+    state=next;
+    if(changed)origin=null;
+    onUpdate(next);
+    const last=next.lastAction;
+    const animate=previous?.id===next.id&&next.version>previous.version&&last&&last.version===next.version;
+    if(animate&&!next.handoff&&!document.hidden) {
+      const mineHit=last.side===next.side?next.shots?.some(s=>last.targets?.includes(s.cell)&&s.hit):next.fleet?.flat().some(cell=>last.targets?.includes(cell));
+      sound(last.kind==='scan'?'scan':last.kind==='plane'?'plane':last.kind==='torpedo'?'torpedo':mineHit?'hit':'splash');
+    }
+    draw();
+    if(animate&&!reduced.matches&&!next.handoff) {
+      const board=root.querySelector('.naval-board');
+      const effects=[];
+      const incoming=last.side!==next.side;
+      const showTarget=incoming?own:!own;
+      if(board && showTarget && last.targets?.length){
+        for(const cell of last.targets){
+          const square=board.querySelector('[data-cell="'+cell+'"]');
+          if(!square)continue;
+          const hit=incoming?next.fleet?.flat().includes(cell):next.shots?.some(s=>s.cell===cell&&s.hit);
+          const splash=node('span',hit?'✦':'◌','naval-burst');
+          splash.setAttribute('aria-hidden','true');
+          splash.style.left=(square.offsetLeft+square.offsetWidth/2)+'px';
+          splash.style.top=(square.offsetTop+square.offsetHeight/2)+'px';
+          board.append(splash);effects.push(splash);
+        }
+        if(['plane','torpedo'].includes(last.kind)){
+          const first=board.querySelector('[data-cell="'+last.targets[0]+'"]');
+          const final=board.querySelector('[data-cell="'+last.targets.at(-1)+'"]');
+          const craft=node('span',last.kind==='plane'?'✈':'●','naval-craft');
+          craft.setAttribute('aria-hidden','true');board.append(craft);effects.push(craft);
+          const x=first.offsetLeft+first.offsetWidth/2,y=first.offsetTop+first.offsetHeight/2;
+          craft.style.left=x+'px';craft.style.top=y+'px';
+          craft.animate([{transform:'translate(-50%,-50%)',opacity:1},{transform:'translate(calc(-50% + '+(final.offsetLeft-first.offsetLeft)+'px),calc(-50% + '+(final.offsetTop-first.offsetTop)+'px))',opacity:0}],{duration:450,easing:'ease-out',fill:'both'});
+        }
+      }
+      board?.classList.add('naval-effect-'+last.kind);
+      const animations=[...(board?.getAnimations({subtree:true})??[])];
+      await Promise.allSettled(animations.map(animation=>animation.finished));
+      effects.forEach(effect=>effect.remove());
+      board?.classList.remove('naval-effect-'+last.kind);
+    }
+    if(next.result&&previous?.id===next.id&&!previous.result) sound(next.training==='local'||next.result===next.side?'win':'loss');
+    schedule();
+  }
+  document.addEventListener('visibilitychange',()=>{if(active&&!document.hidden)schedule();});
+  return {load,stop};
+}
+function randomFleet() {
+  for(;;) {
+    const result=[];
+    for(const size of sizes) {
+      const options=[];
+      for(let cell=0;cell<100;cell++)for(const step of [1,10]) {
+        const ship=Array.from({length:size},(_,i)=>cell+i*step);
+        if(ship.at(-1)>=100||step===1&&Math.floor(ship.at(-1)/10)!==Math.floor(cell/10))continue;
+        if(ship.some(n=>result.flat().some(old=>Math.abs(n%10-old%10)<=1&&Math.abs(Math.floor(n/10)-Math.floor(old/10))<=1)))continue;
+        options.push(ship);
+      }
+      if(!options.length)break;
+      result.push(options[Math.floor(Math.random()*options.length)]);
+    }
+    if(result.length===10)return result;
+  }
+}

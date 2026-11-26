@@ -14,10 +14,16 @@
   <p id="status" role="status"></p>
   <section id="lobby" hidden>
     <div class="club-hero" aria-hidden="true"><canvas data-club-art="hero" width="499" height="232"></canvas></div>
+    <button class="club-tile tictactoe-tile" data-game="tictactoe">
+      <span class="tictactoe-art" aria-hidden="true"></span>
+      <span>Крестики-нолики</span>
+    </button>
+    <button class='club-tile' data-game='battleship'><span class='battleship-art' aria-hidden='true'></span><span>Морской бой</span></button>
     <button id="resume" hidden>Продолжить партию</button>
     <button class="club-tile draughts-tile" data-game="draughts"><canvas data-club-art="draughts" width="250" height="120" aria-hidden="true"></canvas><span>Русские шашки</span></button>
     <button class="club-tile chess-tile" data-game="chess"><canvas data-club-art="chess" width="250" height="120" aria-hidden="true"></canvas><span>Шахматы</span></button>
   </section>
+  <section id='naval-game' hidden></section>
   <section id="extras" hidden>
     <div id="party-panel" hidden>
       <div class="actions archive-tabs">
@@ -55,6 +61,7 @@
   <dialog id="setup">
     <form method="dialog">
       <h2 id="setup-title"></h2>
+      <label id='naval-mode-label' for='naval-mode' hidden>Правила морского боя</label><select id='naval-mode' hidden><option value='classic'>Классика</option><option value='arsenal'>Арсенал</option></select>
       <label for="opponent-mode">С кем играть</label>
       <select id="opponent-mode">
         <option value="friend">С другом по ссылке</option>
@@ -76,7 +83,7 @@
     <form method="dialog">
       <h2>Настройки</h2>
       <label class="feedback-setting"><span>Звуки ходов</span><input id="move-sound" type="checkbox"></label>
-      <label class="feedback-setting"><span>Вибрация при появлении дамки</span><input id="move-vibration" type="checkbox"></label>
+      <label class="feedback-setting"><span>Вибрация игровых событий</span><input id="move-vibration" type="checkbox"></label>
       <button id="notifications" type="button">Уведомления о ходе</button>
       <button>Закрыть</button>
     </form>

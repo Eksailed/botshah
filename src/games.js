@@ -1,16 +1,18 @@
 import { Chess } from 'chess.js';
+import { ticTacToe } from './tictactoe.js';
 import { initial, draughts, step } from './draughts.js';
 
 const square = i => 'abcdefgh'[i%8]+(8-(i>>3));
 const index = s => (8-Number(s[1]))*8+'abcdefgh'.indexOf(s[0]);
 
 export function position(game, history, fen, rules = 'huff') {
+  if (game === 'tictactoe') return ticTacToe(history);
   if (game === 'chess') {
     const chess = new Chess(fen);
     for (const {from,to,promotion} of history) chess.move({from:square(from),to:square(to),promotion});
     const turn = chess.turn();
     const result = chess.isCheckmate() ? (turn === 'w' ? 'b' : 'w') : chess.isDraw() ? 'draw' : null;
-    return {turn,result,fen:chess.fen(),board:chess.board().flat().map(p => p ? p.color+p.type : null),
+    return {turn,result,check:chess.isCheck(),fen:chess.fen(),board:chess.board().flat().map(p => p ? p.color+p.type : null),
       moves:result ? [] : chess.moves({verbose:true}).map(m => ({from:index(m.from),to:index(m.to),promotion:m.promotion}))};
   }
   const huff = rules !== 'strict';

@@ -1,6 +1,7 @@
+import {navalScreen} from './battleship.js';
 const tg = window.Telegram?.WebApp;
 const el = id => document.getElementById(id);
-const labels = {chess:'Шахматы',draughts:'Русские шашки'};
+const labels = {chess:'Шахматы',draughts:'Русские шашки',tictactoe:'Крестики-нолики',battleship:'Морской бой'};
 const symbols = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 const names = {k:'король',q:'ферзь',r:'ладья',b:'слон',n:'конь',p:'пешка'};
 const roomId = /^[a-f0-9]{24}$/;
@@ -8,8 +9,8 @@ let state, selected, busy = false, choice = [];
 let last, review, clockReceived, setupGame, continueId, computerTimer, puzzleHint, hintLevel = 0;
 const trainingTotal = 3;
 let trainingProgress = {};
-let connectionLost = false, pendingMove, drag, suppressBoardClick = false;
-const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',resign:'Сдача',timeout:'Время вышло',
+let connectionLost = false, pendingMove, drag, boardTouch, suppressBoardClick = false;
+const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',three:'Три знака в ряд',resign:'Сдача',timeout:'Время вышло',
   agreement:'По согласию',rules:'По правилам игры'};
 
 async function api(path,body) {
@@ -59,6 +60,8 @@ window.addEventListener('offline',() => {
 window.addEventListener('online',() => { void refreshMatch(); });
 
 function lobby() {
+  el('naval-game').hidden=true;
+  naval?.stop();
   finishDrag();
   connectionLost = false;
   pendingMove = undefined;
@@ -81,7 +84,7 @@ function lobby() {
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const boardSide = () => state.training === 'local' ? 'w' : state.side;
-const cell = index => el('board').children[boardSide() === 'b' ? 63-index : index];
+const cell = index => el('board').children[state.game !== 'tictactoe' && boardSide() === 'b' ? 63-index : index];
 
 const moveSound = el('move-sound');
 const moveVibration = el('move-vibration');
@@ -104,7 +107,67 @@ function unlockMoveAudio() {
 }
 document.addEventListener('pointerdown',unlockMoveAudio,{passive:true});
 document.addEventListener('keydown',unlockMoveAudio);
+document.addEventListener('click',event => {
+  if (event.target.closest('button') && !event.target.closest('#board')) ceramicSound('button');
+});
 moveSound.addEventListener('change',unlockMoveAudio);
+
+function ceramicSound(kind) {
+  if (!moveSound.checked || moveAudio?.state !== 'running' || document.hidden || tg?.isActive === false) return;
+  const notes = {
+    x:[[980,0,.075,.075],[2330,.002,.025,.045]],
+    o:[[620,0,.085,.095],[1470,.003,.025,.065]],
+    line:[[1046,0,.025,.12],[1318,.07,.025,.13],[1568,.14,.025,.14]],
+    win:[[523,0,.035,.4],[659,.06,.03,.38],[784,.12,.03,.36]],
+    loss:[[440,0,.035,.22],[349,.18,.03,.28]],
+    draw:[[420,0,.012,.16],[610,.08,.014,.16],[820,.16,.012,.18],[580,.25,.008,.14]],
+    button:[[900,0,.012,.035]]
+  }[kind];
+  for (const [frequency,offset,volume,duration] of notes) {
+    const tone = moveAudio.createOscillator();
+    const gain = moveAudio.createGain();
+    const start = moveAudio.currentTime+offset;
+    tone.type = 'sine';
+    tone.frequency.setValueAtTime(frequency,start);
+    gain.gain.setValueAtTime(.0001,start);
+    gain.gain.exponentialRampToValueAtTime(volume,start+.003);
+    gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+    tone.connect(gain).connect(moveAudio.destination);
+    tone.onended = () => { tone.disconnect(); gain.disconnect(); };
+    tone.start(start);
+    tone.stop(start+duration+.01);
+  }
+}
+
+function woodSound(kind,game,king = false) {
+  if (!moveSound.checked || moveAudio?.state !== 'running' || document.hidden || tg?.isActive === false) return;
+  const deep = game === 'chess' ? .8 : king ? .86 : 1;
+  const patterns = {
+    move:[[330*deep,0,.065,.07]],
+    capture:[[260*deep,0,.07,.065],[420*deep,.05,.045,.065]],
+    castle:[[300,0,.055,.07],[360,.1,.045,.07]],
+    huff:[[280,0,.035,.12],[180,.05,.025,.1]],
+    crown:[[659,.09,.025,.18],[880,.18,.02,.22]],
+    check:[[550,.08,.02,.16]],
+    win:[[392,0,.025,.4],[494,.07,.022,.35],[587,.14,.02,.35]],
+    loss:[[330,0,.025,.22],[262,.18,.022,.28]],
+    draw:[[300,0,.035,.065],[300,.14,.03,.065]],
+    time:[[660,0,.018,.12]]
+  }[kind];
+  for (const [frequency,offset,volume,duration] of patterns) {
+    const start = moveAudio.currentTime+offset;
+    const tone = moveAudio.createOscillator(), gain = moveAudio.createGain();
+    tone.type = ['move','capture','castle','huff','draw'].includes(kind) ? 'triangle' : 'sine';
+    tone.frequency.setValueAtTime(frequency,start);
+    tone.frequency.exponentialRampToValueAtTime(frequency*.72,start+duration);
+    gain.gain.setValueAtTime(.0001,start);
+    gain.gain.exponentialRampToValueAtTime(volume,start+.002);
+    gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+    tone.connect(gain).connect(moveAudio.destination);
+    tone.onended = () => { tone.disconnect(); gain.disconnect(); };
+    tone.start(start); tone.stop(start+duration+.01);
+  }
+}
 
 function moveEffects(before,move,after) {
   const piece = before.board[move.from];
@@ -113,34 +176,25 @@ function moveEffects(before,move,after) {
     !before.taken?.includes(i) && (after.board[i] !== old || after.taken?.includes(i)));
   const crowned = before.game === 'draughts' && move.from !== move.to &&
     piece[1] === 'p' && after.board[move.to] === piece[0]+'k';
-  return {capture,crowned};
+  const castle = before.game === 'chess' && piece[1] === 'k' && Math.abs(move.to-move.from) === 2;
+  return {capture,crowned,castle,game:before.game,king:piece[1] === 'k',
+    huff:before.game === 'draughts' && move.from === move.to,
+    promoted:Boolean(move.promotion),check:before.game === 'chess' && after.check && !after.result};
 }
-function playMoveEffects({capture,crowned}) {
+function playMoveEffects({capture,crowned,placement,game,king,castle,huff,promoted,check}) {
   if (document.hidden || tg?.isActive === false) return;
-  if (moveSound.checked && moveAudio?.state === 'running') {
-    const start = moveAudio.currentTime;
-    const taps = capture ? [[225,0,.095],[510,.034,.065]] : [[370,0,.068]];
-    for (const [frequency,offset,volume] of taps) {
-      const time = start+offset;
-      const tone = moveAudio.createOscillator();
-      const gain = moveAudio.createGain();
-      tone.type = 'triangle';
-      tone.frequency.setValueAtTime(frequency,time);
-      tone.frequency.exponentialRampToValueAtTime(frequency*.62,time+.032);
-      gain.gain.setValueAtTime(.001,time);
-      gain.gain.exponentialRampToValueAtTime(volume,time+.003);
-      gain.gain.exponentialRampToValueAtTime(.001,time+.055);
-      tone.connect(gain).connect(moveAudio.destination);
-      tone.start(time);
-      tone.stop(time+.06);
-    }
-  }
-  if (crowned && moveVibration.checked) {
+  if (!placement) {
+    woodSound(huff ? 'huff' : castle ? 'castle' : capture ? 'capture' : 'move',game,king);
+    if (crowned || promoted) woodSound('crown',game);
+    if (check) woodSound('check',game);
+  }  if ((crowned || placement) && moveVibration.checked) {
     try {
-      if (tg?.HapticFeedback?.notificationOccurred && tg.isVersionAtLeast?.('6.1') !== false) {
+      if (placement && tg?.HapticFeedback?.impactOccurred && tg.isVersionAtLeast?.('6.1') !== false) {
+        tg.HapticFeedback.impactOccurred('light');
+      } else if (crowned && tg?.HapticFeedback?.notificationOccurred && tg.isVersionAtLeast?.('6.1') !== false) {
         tg.HapticFeedback.notificationOccurred('success');
       } else {
-        navigator.vibrate?.(35);
+        navigator.vibrate?.(placement ? 12 : 35);
       }
     } catch {}
   }
@@ -192,10 +246,12 @@ async function animateMove(move, capture) {
   }
 }
 
-const colorName = side => side === 'w' ? 'Белые' : 'Чёрные';
+const colorName = (side,game = state.game) => game === 'tictactoe'
+  ? (side === 'w' ? 'Крестики' : 'Нолики') : (side === 'w' ? 'Белые' : 'Чёрные');
 function resultLabel(match) {
+  if (match.game === 'battleship' && match.training === 'local') return (match.result === 'w' ? 'Первый' : 'Второй')+' игрок победил';
   if (match.result === 'draw') return 'Ничья';
-  if (match.training === 'local') return 'Победили '+colorName(match.result).toLowerCase();
+  if (match.training === 'local') return 'Победили '+colorName(match.result,match.game).toLowerCase();
   return match.result === match.side ? 'Вы победили!' : 'Вы проиграли';
 }
 function presentMatchResult(next) {
@@ -203,6 +259,9 @@ function presentMatchResult(next) {
   const outcome = next.result === 'draw' ? 'draw' : next.training === 'local' || next.result === next.side ? 'win' : 'loss';
   const reason = el('match-result-reason');
   sheet.dataset.outcome = outcome;
+  if (next.game !== 'tictactoe') woodSound(outcome,next.game);
+  if (next.game === 'tictactoe' && outcome !== 'draw') ceramicSound(outcome);
+  sheet.classList.toggle('tic-result',next.game === 'tictactoe');
   sheet.returnValue = '';
   el('match-result-title').textContent = resultLabel(next);
   reason.textContent = reasons[next.reason] ?? '';
@@ -213,12 +272,101 @@ el('match-result').onclose = () => {
   if (el('match-result').returnValue === 'menu') lobby();
 };
 
+async function animateTicTacToe(next,placed,finished) {
+  if (placed) {
+    ceramicSound(next.board[next.lastMove.to] === 'w' ? 'x' : 'o');
+    playMoveEffects({placement:true});
+    const mark = cell(next.lastMove.to)?.firstElementChild;
+    if (mark && !reducedMotion.matches) {
+      await mark.animate([
+        {transform:'translateY(-14%) scale(1.14)',opacity:0},
+        {transform:'scale(.91)',opacity:1,filter:'brightness(1.4)',offset:.65},
+        {transform:'scale(1)',opacity:1}
+      ],{duration:150,easing:'ease-out'}).finished;
+    }
+  }
+  if (!finished || document.hidden || state !== next) return;
+  ceramicSound(next.result === 'draw' ? 'draw' : 'line');
+  if (reducedMotion.matches) return;
+  const board = el('board');
+  const effect = document.createElement('span');
+  effect.setAttribute('aria-hidden','true');
+  const line = next.winningCells;
+  if (line?.length === 3) {
+    const origin = board.getBoundingClientRect();
+    const center = index => {
+      const {left,top,width,height} = cell(index).getBoundingClientRect();
+      return [left-origin.left-board.clientLeft+width/2,top-origin.top-board.clientTop+height/2];
+    };
+    const [x,y] = center(line[0]);
+    const [endX,endY] = center(line[2]);
+    effect.className = 'tic-winning-line';
+    effect.style.left = x+'px';
+    effect.style.top = y+'px';
+    effect.style.width = Math.hypot(endX-x,endY-y)+'px';
+    effect.style.setProperty('--tic-angle',Math.atan2(endY-y,endX-x)+'rad');
+  } else if (next.result === 'draw') {
+    effect.className = 'tic-draw-sweep';
+  } else {
+    return;
+  }
+  board.append(effect);
+  try {
+    await Promise.allSettled(effect.getAnimations().map(animation => animation.finished));
+  } finally {
+    if (next.result === 'draw') effect.remove();
+  }
+}
+
+function navalSound(kind) {
+  if (!moveSound.checked || moveAudio?.state !== 'running' || document.hidden) return;
+  const patterns = {
+    splash:[[180,0,.035,.18],[280,.04,.02,.18]],
+    hit:[[90,0,.06,.22],[150,.03,.03,.16]],
+    plane:[[180,0,.025,.35],[120,.12,.025,.3]],
+    torpedo:[[240,0,.025,.32],[100,.2,.04,.2]],
+    scan:[[900,0,.025,.18],[900,.22,.012,.18]],
+    win:[[392,0,.03,.4],[494,.08,.025,.35],[587,.16,.025,.35]],
+    loss:[[330,0,.03,.2],[262,.18,.025,.25]]
+  }[kind];
+  for (const [frequency,offset,volume,duration] of patterns ?? []) {
+    const start=moveAudio.currentTime+offset;
+    const tone=moveAudio.createOscillator(), gain=moveAudio.createGain();
+    tone.type='sine';tone.frequency.setValueAtTime(frequency,start);
+    tone.frequency.exponentialRampToValueAtTime(frequency*.65,start+duration);
+    gain.gain.setValueAtTime(.0001,start);
+    gain.gain.exponentialRampToValueAtTime(volume,start+.008);
+    gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+    tone.connect(gain).connect(moveAudio.destination);
+    tone.onended=()=>{tone.disconnect();gain.disconnect();};
+    tone.start(start);tone.stop(start+duration+.01);
+  }
+  if (['hit','win'].includes(kind)&&moveVibration.checked) {
+    try { tg?.HapticFeedback?.impactOccurred('light'); } catch {}
+  }
+}
+let naval;
 async function show(next) {
+  if(next.game === 'battleship'){
+    if(!naval)naval=navalScreen({root:el('naval-game'),api,onMenu:lobby,onUpdate:value=>state=value,onSound:navalSound});
+    el('lobby').hidden=el('extras').hidden=el('game').hidden=true;
+    clearTimeout(computerTimer);
+    el('settings').hidden=true;
+    el('naval-game').hidden=false;
+    el('title').textContent='Морской бой';
+    el('status').textContent='';
+    await naval.load(next);
+    return;
+  }
+  el('naval-game').hidden=true;
+  naval?.stop();
   const opponentJoined = state?.id === next.id && !state.ready && next.ready && !next.training && !next.task;
   finishDrag();
   const finished = Boolean(!next.task && next.result && state?.id === next.id && !state.result);
   const delta = next.version-state?.version;
-  if (state?.id === next.id && delta > 0 && !document.hidden) {
+  const tic = next.game === 'tictactoe';
+  const placed = tic && state?.id === next.id && delta > 0 && Boolean(next.lastMove);
+  if (!tic && state?.id === next.id && delta > 0 && !document.hidden) {
     const frames = next.game === 'draughts' && next.replay?.length >= delta ? next.replay.slice(-delta)
       : delta === 1 && next.lastMove ? [{...next,move:next.lastMove}] : [];
     for (const [index,frame] of frames.entries()) {
@@ -277,7 +425,7 @@ async function show(next) {
   el('title').textContent = labels[state.game];
   el('lobby').hidden = true;
   el('game').hidden = false;
-  const color = state.side === 'w' ? 'белыми' : 'чёрными';
+  const color = state.game === 'tictactoe' ? (state.side === 'w' ? 'крестиками' : 'ноликами') : state.side === 'w' ? 'белыми' : 'чёрными';
   const turn = state.turn === state.side ? 'Ваш ход' : 'Ход соперника';
   const local = state.training === 'local';
   const result = resultLabel(state);
@@ -293,7 +441,8 @@ async function show(next) {
       if (el('connection-status').textContent === message) connectionStatus();
     },3500);
   }
-  if (finished) presentMatchResult(next);
+  if (tic && !document.hidden) await animateTicTacToe(next,placed,finished);
+  if (finished && state === next) presentMatchResult(next);
 }
 
 function actions() {
@@ -324,8 +473,9 @@ function actions() {
   drawClocks();
 }
 
+const timeWarnings = new Set();
 function drawClocks() {
-  if (!state || state.task || review || state.clock?.mode === 'none' || !state.clock) {
+  if (!state || state.game === 'battleship' || state.task || review || state.clock?.mode === 'none' || !state.clock) {
     el('self-clock').hidden = el('opponent-clock').hidden = true;
     return;
   }
@@ -334,6 +484,11 @@ function drawClocks() {
     ? Math.max(0,clock.now-clock.started+performance.now()-clockReceived) : 0;
   for (const [id,side] of [['self-clock',state.side],['opponent-clock',state.side === 'w' ? 'b' : 'w']]) {
     const seconds = Math.ceil(Math.max(0,clock[side]-(state.turn === side ? elapsed : 0))/1000);
+    if (side === state.side && state.game !== 'tictactoe' && !state.result &&
+        seconds > 0 && seconds <= 10 && !timeWarnings.has(state.id)) {
+      timeWarnings.add(state.id);
+      woodSound('time',state.game);
+    }
     const hours = Math.floor(seconds/3600);
     const minutes = String(Math.floor(seconds%3600/60)).padStart(2,'0');
     const label = (hours ? hours+' ч ' : '')+minutes+':'+String(seconds%60).padStart(2,'0');
@@ -344,12 +499,16 @@ function drawClocks() {
 }
 
 function updateBoardFrame() {
+  const tic = state.game === 'tictactoe';
+  el('board').closest('.board-frame').classList.toggle('tic-frame',tic);
   const panelHidden = Boolean(state.task || review);
   const playing = !panelHidden && state.ready && !state.result;
   const white = boardSide() === 'w';
   el('self-panel').hidden = el('opponent-panel').hidden = panelHidden;
   el('self-panel').dataset.side = boardSide();
   el('opponent-panel').dataset.side = white ? 'b' : 'w';
+  el('self-panel').dataset.symbol = tic ? (white ? '×' : '○') : '';
+  el('opponent-panel').dataset.symbol = tic ? (white ? '○' : '×') : '';
   const local = state.training === 'local';
   el('self-name').textContent = local ? colorName(boardSide()) : 'Вы';
   el('opponent-name').textContent = local ? colorName(white ? 'b' : 'w') : state.training ? 'Компьютер' : state.ready ? (state.opponent?.name ?? 'Соперник') : 'Место свободно';
@@ -383,13 +542,14 @@ function draw() {
   updateBoardFrame();
   const display = review ?? state;
   const targets = new Set(state.moves.filter(m => m.from === selected).map(m => m.to));
-  const squares = Array.from({length:64},(_,i) => {
-    const index = boardSide() === 'b' ? 63-i : i;
+  const tic = state.game === 'tictactoe';
+  const squares = Array.from({length:tic ? 9 : 64},(_,i) => {
+    const index = !tic && boardSide() === 'b' ? 63-i : i;
     const piece = display.taken?.includes(index) ? null : display.board[index];
     const button = document.createElement('button');
     button.className = 'cell';
     button.dataset.square = index;
-    if (((index >> 3)+index)%2) button.classList.add('dark');
+    if (!tic && ((index >> 3)+index)%2) button.classList.add('dark');
     if (piece?.[0] === 'w') button.classList.add('white');
     if (puzzleHint?.from === index) button.classList.add('hint-source');
     if (puzzleHint?.to === index) button.classList.add('hint-destination');
@@ -398,6 +558,19 @@ function draw() {
     if (!review && state.huff?.includes(index) && state.side === state.turn) button.classList.add('huff-target');
     if (selected === index) button.classList.add('selected');
     if (targets.has(index)) button.classList.add('target');
+    if (tic) {
+      const description = 'Ряд '+(Math.floor(index/3)+1)+', столбец '+(index%3+1);
+      button.setAttribute('aria-label',description+', '+(piece ? (piece === 'w' ? 'крестик' : 'нолик') : 'свободно'));
+      if (piece) {
+        const mark = document.createElement('span');
+        mark.className = 'tic-mark '+(piece === 'w' ? 'tic-x' : 'tic-o');
+        mark.textContent = piece === 'w' ? '×' : '○';
+        button.append(mark);
+      }
+      if (display.winningCells?.includes(index)) button.classList.add('tic-win');
+      button.onclick = () => select(index);
+      return button;
+    }
     const coordinate = 'abcdefgh'[index%8]+(8-(index>>3));
     let description = coordinate;
     if (piece) {
@@ -442,6 +615,11 @@ async function perform(action) {
 
 function select(index) {
   if (busy || review || state.solved) return;
+  if (state.game === 'tictactoe') {
+    const move = state.moves.find(item => item.to === index);
+    if (move) return send(move);
+    return;
+  }
   if (state.huff?.length) {
     const penalty = state.moves.find(move => move.from === index);
     if (penalty) return send(penalty);
@@ -508,8 +686,14 @@ function finishDrag() {
 }
 boardSurface.addEventListener('pointerdown',event => {
   suppressBoardClick = false;
-  if (!event.isPrimary || event.button !== 0 || busy || review || !state || state.result || state.solved || state.huff?.length) return;
+  if (!event.isPrimary || event.button !== 0 || busy || review || !state || state.result || state.solved) return;
   const from = Number(event.target.closest('.cell')?.dataset.square);
+  if (!Number.isInteger(from)) return;
+  if (event.pointerType === 'touch') {
+    boardTouch = {pointer:event.pointerId,from,id:state.id,version:state.version,turn:state.turn};
+    boardSurface.setPointerCapture(event.pointerId);
+  }
+  if (state.game === 'tictactoe' || state.huff?.length) return;
   if (!state.moves.some(move => move.from === from)) return;
   drag = {pointer:event.pointerId,from,x:event.clientX,y:event.clientY};
 });
@@ -517,6 +701,8 @@ boardSurface.addEventListener('pointermove',event => {
   if (drag?.pointer !== event.pointerId) return;
   if (!drag.ghost) {
     if (Math.hypot(event.clientX-drag.x,event.clientY-drag.y) < 8) return;
+    if (boardTouch?.pointer === event.pointerId &&
+        document.elementFromPoint(event.clientX,event.clientY)?.closest('#board .cell') === cell(drag.from)) return;
     selected = drag.from;
     choice = [];
     draw();
@@ -538,17 +724,28 @@ boardSurface.addEventListener('pointermove',event => {
   drag.ghost.style.top = event.clientY+'px';
 });
 boardSurface.addEventListener('pointerup',event => {
-  if (drag?.pointer !== event.pointerId) return;
-  const moving = Boolean(drag.ghost);
+  const touch = boardTouch?.pointer === event.pointerId ? boardTouch : undefined;
+  if (!touch && drag?.pointer !== event.pointerId) return;
+  if (touch) boardTouch = undefined;
+  const moving = drag?.pointer === event.pointerId && Boolean(drag.ghost);
   const target = document.elementFromPoint(event.clientX,event.clientY)?.closest('#board .cell');
   finishDrag();
-  if (!moving) return;
+  if (!moving && !touch) return;
   suppressBoardClick = true;
-  if (target) select(Number(target.dataset.square));
+  if (!target || !state) return;
+  const to = Number(target.dataset.square);
+  if (touch && (state.id !== touch.id || state.version !== touch.version || state.turn !== touch.turn ||
+      (!moving && to !== touch.from))) return;
+  select(to);
 });
-boardSurface.addEventListener('pointercancel',finishDrag);
+boardSurface.addEventListener('pointercancel',event => {
+  if (boardTouch?.pointer === event.pointerId) boardTouch = undefined;
+  if (drag?.pointer === event.pointerId) finishDrag();
+});
 boardSurface.addEventListener('lostpointercapture',event => {
-  if (event.target === boardSurface && drag?.pointer === event.pointerId) finishDrag();
+  if (event.target !== boardSurface) return;
+  if (boardTouch?.pointer === event.pointerId) boardTouch = undefined;
+  if (drag?.pointer === event.pointerId) finishDrag();
 });
 boardSurface.addEventListener('pointerleave',event => {
   if (drag?.pointer === event.pointerId && !drag.ghost) finishDrag();
@@ -603,20 +800,21 @@ for (const button of document.querySelectorAll('[data-game]')) {
     setupGame = button.dataset.game;
     el('setup-title').textContent = labels[setupGame];
     el('opponent-mode').value = 'friend';
+    el('naval-mode-label').hidden=el('naval-mode').hidden=setupGame!=='battleship';
     updateSetupClock();
     el('setup').returnValue = '';
     el('setup').showModal();
   };
 }
 function updateSetupClock() {
-  el('clock-label').hidden = el('clock-mode').hidden = el('opponent-mode').value !== 'friend';
+  el('clock-label').hidden = el('clock-mode').hidden = el('opponent-mode').value !== 'friend' || setupGame === 'battleship';
 }
 el('opponent-mode').onchange = updateSetupClock;
 el('setup').onclose = () => {
   if (el('setup').returnValue !== 'create') return;
     const mode = el('opponent-mode').value;
-  perform(async () => show(await api('',{game:setupGame,clock:mode === 'friend' ? el('clock-mode').value : 'none',
-    training:mode === 'friend' ? null : mode})));
+  perform(async () => show(await api('',{game:setupGame,clock:mode === 'friend' && setupGame !== 'battleship' ? el('clock-mode').value : 'none',
+    mode:setupGame === 'battleship' ? el('naval-mode').value : undefined,training:mode === 'friend' ? null : mode})));
 };
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));
@@ -723,8 +921,15 @@ async function loadRooms(archived = false) {
     }
     if (!archived && room.ready && room.yourTurn) button.classList.add('your-turn');
     title.append(status);
-    button.append(art,title);
-    paintClubArt(art);
+    if (room.game === 'tictactoe' || room.game === 'battleship') {
+      const illustration = document.createElement('span');
+      illustration.className = room.game === 'battleship' ? 'battleship-art' : 'tictactoe-art';
+      illustration.setAttribute('aria-hidden','true');
+      button.append(illustration,title);
+    } else {
+      button.append(art,title);
+      paintClubArt(art);
+    }
     button.onclick = () => perform(async () => show(await api('/'+room.id)));
     if (archived) {
       list.append(button);
@@ -741,7 +946,7 @@ async function loadRooms(archived = false) {
       if (!window.confirm(question)) return;
       perform(async () => {
         try {
-          await api('/'+room.id+'/close',{intent:resign ? 'resign' : 'withdraw'});
+          await api('/'+room.id+'/close',{intent:resign ? 'resign' : 'withdraw',version:room.version});
         } catch (error) {
           if (error.status === 409 || error.status === 410) await loadRooms();
           throw error;
@@ -810,7 +1015,7 @@ async function showMeetings(opponent,game = 'all') {
   title.textContent = name+' · '+tallyText(totals);
   const filters = document.createElement('div');
   filters.className = 'actions archive-tabs';
-  for (const [id,label] of [['all','Все'],['draughts','Шашки'],['chess','Шахматы']]) {
+  for (const [id,label] of [['all','Все'],['draughts','Шашки'],['chess','Шахматы'],['tictactoe','Крестики-нолики'],['battleship','Морской бой']]) {
     const filter = menuButton(label,() => showMeetings(opponent,id));
     filter.setAttribute('aria-pressed',String(game === id));
     filters.append(filter);
@@ -896,7 +1101,7 @@ if (!tg?.initData) {
   else if (typeof invite === 'string' && invite.startsWith('i_')) {
     perform(async () => show(await api('/challenge',{payload:invite})));
   }
-  else if (invite === 'chess' || invite === 'draughts') {
+  else if (invite === 'chess' || invite === 'draughts' || invite === 'tictactoe' || invite === 'battleship') {
     perform(async () => show(await api('',{game:invite})));
   }
   setInterval(drawClocks,250);
@@ -905,7 +1110,7 @@ if (!tg?.initData) {
 
 let refreshingMatch = false;
 async function refreshMatch() {
-  if (refreshingMatch || busy || !state || state.task || state.training || review ||
+  if (refreshingMatch || busy || !state || state.game === 'battleship' || state.task || state.training || review ||
       document.hidden || (state.result && state.rematch)) return;
   const snapshot = state;
   refreshingMatch = true;

@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS battleship_states (
+ room_id TEXT PRIMARY KEY REFERENCES rooms(id),
+ version INTEGER NOT NULL DEFAULT 0,
+ state TEXT NOT NULL
+);

@@ -1,3 +1,4 @@
+import {battleshipAPI} from './battleship-api.js';
 import { timingSafeEqual } from 'node:crypto';
 import { challenge, readChallenge, computerMove } from './modes.js';
 import { position } from './games.js';
@@ -21,13 +22,12 @@ async function webhook(request, env, origin) {
   }
   const {message, inline_query: query} = await body(request);
   if (query) {
-    const games = [['draughts','Русские шашки','huff'],['chess','Шахматы','huff']];
+    const games = [['draughts','Русские шашки','huff'],['chess','Шахматы','huff'],['tictactoe','Крестики-нолики','huff'],['battleship','Морской бой','classic']];
     const search = query.query.trim().toLowerCase();
     const results = games.filter(([id,title]) => id.includes(search) || title.toLowerCase().includes(search))
       .map(([id,title,rules]) => ({
         type:'article',id:id+'-'+rules,title,description:'Общая партия для двоих',
-        thumbnail_url:(env.APP_URL || origin).replace(/\/+$/,'')+'/inline-'+id+'.jpg',
-        thumbnail_width:160,thumbnail_height:160,
+        thumbnail_url:(env.APP_URL || origin).replace(/\/+$/,'')+'/inline-'+id+'.jpg',thumbnail_width:160,thumbnail_height:160,
         input_message_content:{message_text:title+' в «Доске»'},
         reply_markup:{inline_keyboard:[[{text:'Открыть партию',url:'https://t.me/'+env.BOT_USERNAME+'?startapp='+challenge(env.BOT_TOKEN,query.from.id,id,rules,roomId())}]]}
       }));
@@ -40,7 +40,7 @@ async function webhook(request, env, origin) {
   if (message?.chat?.type === 'private' && /^\/start(?:@\w+)?(?:\s|$)/.test(message.text ?? '')) {
     const response = await fetch('https://api.telegram.org/bot'+env.BOT_TOKEN+'/sendMessage',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({chat_id:message.chat.id,text:'Выберите шахматы или шашки и пригласите друга.',
+      body:JSON.stringify({chat_id:message.chat.id,text:'Выберите игру и пригласите друга.',
         reply_markup:{inline_keyboard:[[{text:'Играть',web_app:{url:env.APP_URL || origin}}]]}})
     });
     if (!response.ok) fail(502,'Telegram не принял ответ');
@@ -65,6 +65,12 @@ async function room(request, env, path, ctx) {
     await db.prepare("INSERT OR IGNORE INTO rooms (id,game,white,rules,updated_at) VALUES (?,?,?,?,?)")
       .bind(invite.id,invite.game,invite.owner,invite.rules,Date.now()).run();
     path = '/api/rooms/'+invite.id+'/join';
+  }
+  const naval = new RegExp('^/api/rooms/([a-f0-9]{24})(?:/(join|move|computer|close|handoff|suspend|rematch|review|undo|draw))?$').exec(path);
+  if (post && path === '/api/rooms' && input.game === 'battleship') return battleshipAPI(request,env,user,input);
+  if (naval) {
+    const kind = await db.prepare('SELECT game FROM rooms WHERE id=?').bind(naval[1]).first();
+    if(kind?.game === 'battleship') return battleshipAPI(request,env,user,input,naval[1],naval[2]);
   }
   const match = /^\/api\/rooms\/([a-f0-9]{24})(?:\/(join|move|rematch|review|close|draw|computer|undo))?$/.exec(path);
   if (path === '/api/rooms/preferences') {
@@ -95,11 +101,11 @@ async function room(request, env, path, ctx) {
   }
   if (path === '/api/rooms' && request.method === 'GET') {
     const {results} = await db.prepare(
-      "SELECT id,game,black IS NOT NULL AS ready, history != '[]' AS started, training, white = ?1 AS isWhite, turn, CASE WHEN turn IS NULL THEN history END AS legacy "+
+      "SELECT id,game,black IS NOT NULL AS ready, history != '[]' AS started, training, white = ?1 AS isWhite, turn, (SELECT version FROM battleship_states WHERE room_id=rooms.id) AS navalVersion, CASE WHEN turn IS NULL THEN history END AS legacy "+
       "FROM rooms WHERE (white = ?1 OR black = ?1) AND result IS NULL ORDER BY rowid DESC"
     ).bind(user).all();
-    return Response.json({rooms:results.map(({id,game,ready,started,training,isWhite,turn,legacy}) => ({
-      id,game,ready,started,training,yourTurn:training !== 'local' && (turn ?? position(game,JSON.parse(legacy)).turn) === (isWhite ? 'w' : 'b')
+    return Response.json({rooms:results.map(({id,game,ready,started,training,isWhite,turn,legacy,navalVersion}) => ({
+      id,game,ready,started:game==='battleship'?navalVersion>1:started,training,version:navalVersion,yourTurn:training !== 'local' && (turn ?? (game === 'battleship' ? null : position(game,JSON.parse(legacy)).turn)) === (isWhite ? 'w' : 'b')
     })).sort((a,b) => Number(b.ready && b.yourTurn)-Number(a.ready && a.yourTurn))},{headers:{'Cache-Control':'no-store'}});
   }
   if (path === '/api/rooms/opponents') {
@@ -118,7 +124,7 @@ async function room(request, env, path, ctx) {
     }
     if (post) {
       const {opponent,game = 'all'} = input;
-      if (!Number.isSafeInteger(opponent) || opponent <= 0 || !['all','chess','draughts'].includes(game)) fail(400,'Выберите соперника');
+      if (!Number.isSafeInteger(opponent) || opponent <= 0 || !['all','chess','draughts','tictactoe','battleship'].includes(game)) fail(400,'Выберите соперника');
       const {results:groups} = await db.prepare(pairs+"SELECT game,"+score+"FROM meetings WHERE opponent = ?2 GROUP BY game")
         .bind(user,opponent).all();
       if (!groups.length) fail(404,'Нет завершённых встреч с этим соперником');
@@ -142,7 +148,7 @@ async function room(request, env, path, ctx) {
   let id = match?.[1];
   const action = match?.[2];
   if (post && path === '/api/rooms') {
-    if (!['chess','draughts'].includes(input.game)) fail(400,'Выберите игру');
+    if (!['chess','draughts','tictactoe'].includes(input.game)) fail(400,'Выберите игру');
     const clock = input.clock ?? 'none';
     if (!Object.hasOwn(clocks,clock)) fail(400,'Выберите контроль времени');
     const rules = 'huff';
@@ -231,7 +237,7 @@ async function room(request, env, path, ctx) {
     if (!state.result) fail(403,'Партия ещё идёт');
     if (!Number.isInteger(input.ply) || input.ply < 0 || input.ply > history.length) fail(400,'Ход не найден');
     const snapshot = evaluate(history.slice(0,input.ply));
-    return Response.json({board:snapshot.board,taken:snapshot.taken,lastMove:history[input.ply-1] ?? null});
+    return Response.json({board:snapshot.board,taken:snapshot.taken,winningCells:snapshot.winningCells,lastMove:history[input.ply-1] ?? null});
   }
   if (action === 'rematch') {
     if (!state.result || !ready || row.training) fail(403,'Реванш доступен после партии');
@@ -266,7 +272,7 @@ async function room(request, env, path, ctx) {
     } else if (row.clock === 'daily') {
       whiteMs = blackMs = clocks.daily;
     }
-    reason = state.result ? state.result === 'draw' ? 'rules' : row.game === 'chess' ? 'mate' : 'blocked' : null;
+    reason = state.result ? state.result === 'draw' ? 'rules' : row.game === 'chess' ? 'mate' : row.game === 'tictactoe' ? 'three' : 'blocked' : null;
     const updated = await db.prepare(
       'UPDATE rooms SET history = ?, result = ?, result_reason = ?, updated_at = ?, turn = ?, white_ms = ?, black_ms = ?, started_ms = ? WHERE id = ? AND history = ? AND result IS NULL'
     ).bind(JSON.stringify(history),state.result,reason,now,state.turn,whiteMs,blackMs,row.started_ms === null ? null : now,id,row.history).run();

@@ -131,7 +131,7 @@ body:has(#extras:not([hidden])) {
   border: 1px solid #927441;
   font: 700 clamp(17px,5vw,23px) var(--font-display);
 }
-.club-tile canvas, .club-tile::after {
+.club-tile canvas, .club-tile .tictactoe-art, .club-tile::after {
   content: '';
   position: absolute;
   inset: 0 0 0 50%;
@@ -622,3 +622,198 @@ dialog button:not(.brass) {
 #game #connection-status[data-kind="offline"] { background: #3a2e21; }
 #opponent-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #result-rematch { border-color: #d6af66; }
+
+/* Крестики-нолики: керамические плитки и эмалевые знаки. */
+.club-tile .tictactoe-art {
+  background: url('/tictactoe-tile.jpg') 68% center / cover no-repeat;
+  pointer-events: none;
+}
+#game .tic-frame { display: block; width: min(100%,100cqh,460px); }
+.tic-frame :is(.board-ranks,.board-files) { display: none; }
+#game .tic-frame #board {
+  position: relative;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  grid-template-rows: repeat(3,minmax(0,1fr));
+  gap: clamp(3px,1vw,6px);
+  padding: clamp(5px,1.6vw,10px);
+  border: 2px solid #965f36;
+  border-radius: 12px;
+  background: repeating-linear-gradient(98deg,#32170830 0 1px,transparent 1px 4px),linear-gradient(125deg,#875436,#422316);
+}
+#game .tic-frame .cell {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid #c6a87a;
+  border-radius: clamp(5px,2vw,12px);
+  background: radial-gradient(ellipse at 32% 8%,#fff7e5,#eedebe 58%,#dbbd90);
+  box-shadow: inset 0 2px 1px #fff9eb,inset 0 -3px 5px #79552c40,0 2px 3px #231307b0;
+}
+#game .tic-frame .cell.last-move:not(.tic-win) { outline: 2px solid #b18b50; outline-offset: -4px; }
+#game .tic-frame .cell:focus-visible { outline: 3px solid #19499c; outline-offset: -5px; }
+.tic-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 66%;
+  aspect-ratio: 1;
+  font-size: 0;
+  filter: drop-shadow(0 3px 2px #4d2c2177);
+}
+.tic-x::before,.tic-x::after {
+  content: '';
+  position: absolute;
+  width: 112%;
+  height: 25%;
+  border-radius: 999px;
+  background: linear-gradient(#6093dd,#1c4fa8 22%,#102d79 72%,#0b1c4c);
+  box-shadow: inset 0 1px 1px #a5c4ff;
+  transform: rotate(45deg);
+}
+.tic-x::after { transform: rotate(-45deg); }
+.tic-o {
+  border-radius: 50%;
+  background: radial-gradient(circle at 37% 25%,#fcb190,#bd4323 46%,#8e2714 72%,#571b13);
+  -webkit-mask: radial-gradient(circle,#0000 43%,#000 45%);
+  mask: radial-gradient(circle,#0000 43%,#000 45%);
+}
+#game .tic-frame .tic-win {
+  outline: 2px solid #ffed92;
+  outline-offset: -4px;
+  box-shadow: inset 0 0 14px #f7b630,0 0 9px #ffb426;
+}
+.player-panel[data-symbol]:not([data-symbol=""]) .player-disc {
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  color: #fff7e4;
+}
+.player-panel[data-symbol] .player-disc::after { font: 700 12px/1 var(--font-display); }
+.player-panel[data-symbol='×'] .player-disc { background: #183d8d; }
+.player-panel[data-symbol='○'] .player-disc { background: #a6321a; }
+.player-panel[data-symbol='×'] .player-disc::after { content: '×'; }
+.player-panel[data-symbol='○'] .player-disc::after { content: '○'; }
+#match-result.tic-result h2 {
+  padding: .35em .2em;
+  border: 1px solid #d2af75;
+  border-radius: 14px;
+  background: linear-gradient(#fff3d9,#e9d3aa);
+  box-shadow: inset 0 2px 0 #fffaec,0 3px 6px #07181166;
+  color: #203b2c;
+  font-size: clamp(22px,6vw,38px);
+}
+#match-result.tic-result #result-rematch {
+  border-color: #688bd6;
+  border-radius: 14px;
+  background: linear-gradient(#315bb7,#142e78);
+  color: #fff5e2;
+}
+#match-result.tic-result [value="menu"] {
+  border-color: #d2af75;
+  border-radius: 14px;
+  background: linear-gradient(#fff3d9,#e9d3aa);
+  color: #203b2c;
+}
+#room-list .archive-tabs:has(button:nth-child(4)) { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.tic-winning-line,.tic-draw-sweep {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.tic-winning-line {
+  height: clamp(3px,1vw,5px);
+  border-radius: 999px;
+  background: #fff4bc;
+  box-shadow: 0 0 5px 2px #ffc756,0 0 12px #ec9b21;
+  transform-origin: left center;
+  animation: tic-winning-line 260ms ease-out both;
+}
+@keyframes tic-winning-line {
+  from { transform: translateY(-50%) rotate(var(--tic-angle)) scaleX(0); }
+  to { transform: translateY(-50%) rotate(var(--tic-angle)) scaleX(1); }
+}
+@property --tic-sweep-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.tic-draw-sweep {
+  inset: 0;
+  padding: 4px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--tic-sweep-angle),transparent 78%,#ffe9ac 97%,transparent);
+  mask: linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: tic-draw-sweep 420ms ease-in-out both;
+}
+@keyframes tic-draw-sweep {
+  from { --tic-sweep-angle: 0deg; opacity: 0; }
+  20%,80% { opacity: 1; }
+  to { --tic-sweep-angle: 360deg; opacity: 0; }
+}
+.club-tile .battleship-art {
+  position:absolute; inset:0 0 0 50%; z-index:-1;
+  background:url('/battleship-tile.jpg') center / cover;
+  pointer-events:none;
+}
+main:has(#naval-game:not([hidden])) { padding:8px; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
+main:has(#naval-game:not([hidden])) h1 { font-size:24px; }
+main:has(#naval-game:not([hidden])) #status { display:none; }
+#naval-game { min-height:0; overflow:auto; flex:1; padding:6px 0 12px; scrollbar-width:thin; }
+#naval-game button,#naval-game select {
+  min-height:38px; padding:8px 10px; border:1px solid #9c804d; border-radius:9px;
+  background:linear-gradient(145deg,#304d3e,#19332b); color:#ffedc6;
+  font:500 12px var(--font-interface); touch-action:manipulation;
+}
+#naval-game button:disabled { opacity:.55; cursor:default; }
+#naval-game .brass { background:linear-gradient(#f8dda1,#c69b4b); color:#182b20; font-weight:700; }
+.naval-heading,.naval-fleets { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.naval-heading strong { font:700 18px var(--font-display); }
+.naval-heading > span { color:#d6bb83; font-size:12px; }
+.naval-fleets { margin:7px 0; color:#decda9; font-size:11px; }
+.naval-controls,.naval-tools,.naval-actions,.naval-footer { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0; }
+.naval-tools { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+#naval-game .naval-tools button { padding:7px 2px; font-size:11px; }
+#naval-game button[aria-pressed=true] { background:#e5c57d; color:#152d22; }
+.naval-help,.naval-message { margin:5px 0; font-size:11px; line-height:1.4; overflow-wrap:anywhere; }
+.naval-message { color:#ffcf94; }
+.naval-board {
+  position:relative; display:grid; grid-template-columns:15px repeat(10,minmax(0,1fr));
+  width:min(100%,480px); margin:8px auto; padding:5px 5px 7px 2px;
+  border:2px solid #a2824c; border-radius:9px;
+  background:linear-gradient(135deg,#1b3730,#0d2825); box-shadow:0 4px 14px #071a15;
+}
+.naval-coordinate { display:grid; place-items:center; font-size:9px; color:#e2c78e; min-height:14px; }
+#naval-game .naval-cell {
+  position:relative; aspect-ratio:1; min-height:0; min-width:0; padding:0;
+  border:1px solid #9ab3a433; border-radius:0; background:linear-gradient(145deg,#285451,#1b3e3c);
+  color:#dfeae2; font:700 clamp(12px,4vw,22px) var(--font-interface);
+}
+#naval-game .naval-cell:disabled { opacity:1; }
+#naval-game .naval-cell.ship { background:linear-gradient(135deg,#c3b68b,#746747); box-shadow:inset 0 0 0 3px #423c2b77; }
+#naval-game .naval-cell.hit { color:#ffd49e; background:radial-gradient(#bc633b,#5d302a); }
+#naval-game .naval-cell.sunk { outline:1px solid #e0b66b; outline-offset:-2px; }
+#naval-game .naval-cell.aim { background:#778b60; outline:2px solid #f8de9f; outline-offset:-3px; }
+.naval-actions > .brass { flex:1; }
+.naval-footer { justify-content:space-between; }
+.naval-handoff { min-height:65dvh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:12px; }
+.naval-handoff h2,.naval-handoff p { margin:0; }
+.naval-handoff h2 { font:700 25px var(--font-display); }
+.naval-anchor { font-size:54px; color:#e4c17c; }
+.naval-result { padding:16px; border:1px solid #ba9656; border-radius:14px; text-align:center; background:linear-gradient(140deg,#34503c,#152d23); animation:result-sheet 240ms ease-out both; }
+.naval-result h2 { color:#f4d99a; font:700 27px var(--font-display); margin:0 0 12px; }
+.naval-result button { margin:4px; }
+.naval-effect-shot { animation:naval-impact 240ms ease-out; }
+.naval-effect-plane { animation:naval-flight 450ms ease-out; }
+.naval-effect-torpedo { animation:naval-torpedo 450ms ease-out; }
+.naval-effect-scan::after { content:''; position:absolute; inset:10%; border:2px solid #e7dc97; border-radius:50%; pointer-events:none; animation:naval-scan 450ms ease-out both; }
+@keyframes naval-impact { 40% { filter:brightness(1.3); } }
+@keyframes naval-flight { 50% { box-shadow:inset 0 0 50px #d7bc7b77; } }
+@keyframes naval-torpedo { 50% { filter:brightness(1.25) saturate(1.3); } }
+@keyframes naval-scan { from { transform:scale(.1);opacity:1; } to { transform:scale(1.2);opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .naval-result { animation:none; } }.naval-burst,.naval-craft { position:absolute; pointer-events:none; z-index:3; color:#ffe1a0; text-shadow:0 0 10px #f2b34f; }
+.naval-burst { font-size:32px; animation:naval-burst 350ms ease-out both; }
+.naval-craft { font-size:26px; }
+@keyframes naval-burst { from { transform:translate(-50%,-50%) scale(.3);opacity:1; } to { transform:translate(-50%,-50%) scale(1.5);opacity:0; } }
