@@ -191,13 +191,19 @@ async function animateMove(move, capture) {
   }
 }
 
+const colorName = side => side === 'w' ? 'Белые' : 'Чёрные';
+function resultLabel(match) {
+  if (match.result === 'draw') return 'Ничья';
+  if (match.training === 'local') return 'Победили '+colorName(match.result).toLowerCase();
+  return match.result === match.side ? 'Вы победили!' : 'Вы проиграли';
+}
 function presentMatchResult(next) {
   const sheet = el('match-result');
-  const outcome = next.result === 'draw' ? 'draw' : next.result === next.side ? 'win' : 'loss';
+  const outcome = next.result === 'draw' ? 'draw' : next.training === 'local' || next.result === next.side ? 'win' : 'loss';
   const reason = el('match-result-reason');
   sheet.dataset.outcome = outcome;
   sheet.returnValue = '';
-  el('match-result-title').textContent = {win:'Вы победили!',loss:'Вы проиграли',draw:'Ничья'}[outcome];
+  el('match-result-title').textContent = resultLabel(next);
   reason.textContent = reasons[next.reason] ?? '';
   reason.hidden = !reason.textContent;
   if (!sheet.open) sheet.showModal();
@@ -272,8 +278,9 @@ async function show(next) {
   el('game').hidden = false;
   const color = state.side === 'w' ? 'белыми' : 'чёрными';
   const turn = state.turn === state.side ? 'Ваш ход' : 'Ход соперника';
-  const result = state.result === 'draw' ? 'Ничья' : state.result === state.side ? 'Вы выиграли' : 'Соперник выиграл';
-  el('status').textContent = state.huff?.length && state.turn === state.side ? 'Выберите шашку, которую хотите снять' : state.task ? state.task+(state.series ? ' · '+(state.series.index+1)+'/'+state.series.total : '') : (state.result ? result+(state.reason ? ' · '+reasons[state.reason] : '') : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника'));
+  const local = state.training === 'local';
+  const result = resultLabel(state);
+  el('status').textContent = state.huff?.length && state.turn === state.side ? 'Выберите шашку, которую хотите снять' : state.task ? state.task+(state.series ? ' · '+(state.series.index+1)+'/'+state.series.total : '') : (state.result ? result+(state.reason ? ' · '+reasons[state.reason] : '') : (local ? 'Ходят '+colorName(state.turn).toLowerCase() : 'Вы играете '+color+' · '+(state.ready ? turn : 'Ждём соперника')));
   actions();
   draw();
   scheduleComputer();
@@ -300,7 +307,7 @@ function actions() {
   el('draw-offer').textContent = state.drawOffer === 'received' ? 'Принять ничью'
     : state.drawOffer === 'sent' ? 'Ничья предложена' : 'Предложить ничью';
   el('draw-decline').hidden = !canDraw || state.drawOffer !== 'received';
-  el('training-undo').hidden = !state.training || !state.version || Boolean(review);
+  el('training-undo').hidden = !state.training || state.training === 'local' || !state.version || Boolean(review);
   const rematch = el('rematch');
   rematch.hidden = !state.result || !state.ready || Boolean(state.training || review);
   rematch.disabled = state.offer === 'sent' && !state.rematch;
@@ -342,8 +349,10 @@ function updateBoardFrame() {
   el('self-panel').hidden = el('opponent-panel').hidden = panelHidden;
   el('self-panel').dataset.side = state.side;
   el('opponent-panel').dataset.side = white ? 'b' : 'w';
-  el('opponent-name').textContent = state.training ? 'Компьютер' : state.ready ? (state.opponent?.name ?? 'Соперник') : 'Место свободно';
-  el('self-turn').textContent = state.huff?.length ? 'Снимите шашку' : 'Ваш ход';
+  const local = state.training === 'local';
+  el('self-name').textContent = local ? colorName(state.side) : 'Вы';
+  el('opponent-name').textContent = local ? colorName(white ? 'b' : 'w') : state.training ? 'Компьютер' : state.ready ? (state.opponent?.name ?? 'Соперник') : 'Место свободно';
+  el('self-turn').textContent = state.huff?.length ? 'Снимите шашку' : local ? 'Ходят '+colorName(state.turn).toLowerCase() : 'Ваш ход';
   el('self-turn').hidden = !playing || state.turn !== state.side;
   el('opponent-turn').hidden = !playing || state.turn === state.side;
   el('status').classList.toggle('match-status',!state.task && !state.result && !(state.huff?.length && state.turn === state.side));
@@ -611,10 +620,10 @@ for (const button of document.querySelectorAll('[data-puzzle]')) {
 }
 function scheduleComputer() {
   clearTimeout(computerTimer);
-  if (!state?.training || state.result || state.turn !== 'b' || review) return;
+  if (!state?.training || state.training === 'local' || state.result || state.turn !== 'b' || review) return;
   computerTimer = setTimeout(() => {
     if (busy) return scheduleComputer();
-    if (!state?.training || state.result || state.turn !== 'b') return;
+    if (!state?.training || state.training === 'local' || state.result || state.turn !== 'b') return;
     perform(async () => {
       const path = '/'+state.id;
       try { await show(await api(path+'/computer',{version:state.version})); }
@@ -703,11 +712,11 @@ async function loadRooms(archived = false) {
     const status = document.createElement('small');
     status.textContent = !room.ready ? 'Ждём соперника' : room.yourTurn ? 'Ваш ход' : 'Ход соперника';
     if (archived) {
-      const outcome = room.result === 'draw' ? 'Ничья' : (room.result === 'w') === Boolean(room.isWhite) ? 'Победа' : 'Поражение';
+      const outcome = room.result === 'draw' ? 'Ничья' : room.training === 'local' ? resultLabel(room) : (room.result === 'w') === Boolean(room.isWhite) ? 'Победа' : 'Поражение';
       const date = room.date ? new Intl.DateTimeFormat('ru',{day:'numeric',month:'short'}).format(room.date) : null;
-      status.textContent = [outcome,room.training ? 'Компьютер' : room.opponent || 'Соперник',date].filter(Boolean).join(' · ');
+      status.textContent = [outcome,room.training === 'local' ? 'На одном телефоне' : room.training ? 'Компьютер' : room.opponent || 'Соперник',date].filter(Boolean).join(' · ');
     } else if (room.training) {
-      status.textContent = 'Тренировка с компьютером';
+      status.textContent = room.training === 'local' ? 'На одном телефоне' : 'Тренировка с компьютером';
     }
     if (!archived && room.ready && room.yourTurn) button.classList.add('your-turn');
     title.append(status);
@@ -721,14 +730,15 @@ async function loadRooms(archived = false) {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'room-close';
-    close.textContent = room.started ? 'Сдаться' : 'Отозвать';
+    const resign = room.started && room.training !== 'local';
+    close.textContent = resign ? 'Сдаться' : 'Отозвать';
     close.setAttribute('aria-label',close.textContent+' — '+labels[room.game]);
     close.onclick = () => {
-      const question = room.started ? 'Сдаться? Сопернику засчитается победа.' : 'Отозвать партию? Приглашение перестанет действовать.';
+      const question = resign ? 'Сдаться? Сопернику засчитается победа.' : 'Отозвать партию? Приглашение перестанет действовать.';
       if (!window.confirm(question)) return;
       perform(async () => {
         try {
-          await api('/'+room.id+'/close',{intent:room.started ? 'resign' : 'withdraw'});
+          await api('/'+room.id+'/close',{intent:resign ? 'resign' : 'withdraw'});
         } catch (error) {
           if (error.status === 409 || error.status === 410) await loadRooms();
           throw error;

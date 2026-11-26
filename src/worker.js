@@ -99,7 +99,7 @@ async function room(request, env, path, ctx) {
       "FROM rooms WHERE (white = ?1 OR black = ?1) AND result IS NULL ORDER BY rowid DESC"
     ).bind(user).all();
     return Response.json({rooms:results.map(({id,game,ready,started,training,isWhite,turn,legacy}) => ({
-      id,game,ready,started,training,yourTurn:(turn ?? position(game,JSON.parse(legacy)).turn) === (isWhite ? 'w' : 'b')
+      id,game,ready,started,training,yourTurn:training !== 'local' && (turn ?? position(game,JSON.parse(legacy)).turn) === (isWhite ? 'w' : 'b')
     })).sort((a,b) => Number(b.ready && b.yourTurn)-Number(a.ready && a.yourTurn))},{headers:{'Cache-Control':'no-store'}});
   }
   if (path === '/api/rooms/opponents') {
@@ -147,8 +147,8 @@ async function room(request, env, path, ctx) {
     if (!Object.hasOwn(clocks,clock)) fail(400,'Выберите контроль времени');
     const rules = 'huff';
     const training = input.training ?? null;
-    if (training !== null && !['easy','normal'].includes(training)) fail(400,'Выберите сложность');
-    if (training && clock !== 'none') fail(400,'Тренировка идёт без часов');
+    if (training !== null && !['easy','normal','local'].includes(training)) fail(400,'Выберите сложность');
+    if (training && clock !== 'none') fail(400,'Этот режим идёт без часов');
     id = roomId();
     await db.prepare('INSERT INTO rooms (id,game,white,clock,white_ms,black_ms,rules,training,black,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .bind(id,input.game,user,clock,clocks[clock],clocks[clock],rules,training,training ? 0 : null,Date.now()).run();
@@ -200,7 +200,7 @@ async function room(request, env, path, ctx) {
     reason = row.result_reason;
   }
   if (action === 'undo') {
-    if (!row.training) fail(403,'Отмена доступна только в тренировке');
+    if (!row.training || row.training === 'local') fail(403,'Отмена доступна только в тренировке');
     if (input.version !== history.length || !history.length) fail(409,'Нет хода для отмены');
     let index = history.length-1;
     while (index > 0 && evaluate(history.slice(0,index)).turn !== 'w') index--;
@@ -218,7 +218,7 @@ async function room(request, env, path, ctx) {
   }
   if (action === 'close') {
     if (state.result) fail(409,'Партия уже завершена');
-    const required = history.length ? 'resign' : 'withdraw';
+    const required = history.length && row.training !== 'local' ? 'resign' : 'withdraw';
     if (input.intent !== required) fail(409,'Партия изменилась. Обновите список');
     const result = required === 'withdraw' ? 'cancelled' : side === 'w' ? 'b' : 'w';
     const changed = await db.prepare(
@@ -245,8 +245,8 @@ async function room(request, env, path, ctx) {
   if (action === 'move' || action === 'computer') {
     const bot = action === 'computer';
     if (input.version !== history.length) fail(409,'Позиция уже изменилась');
-    const actor = bot ? 'b' : side;
-    if (bot && !row.training) fail(403,'Это не тренировка');
+    const actor = bot ? 'b' : row.training === 'local' ? state.turn : side;
+    if (bot && !['easy','normal'].includes(row.training)) fail(403,'Это не тренировка');
     if (!ready || state.turn !== actor || state.result) fail(403,'Ход сейчас недоступен');
     const move = bot ? computerMove(state,row.training,row.game,row.rules) : state.moves.find(m => m.from === input.from && m.to === input.to && m.promotion === input.promotion);
     if (!move) fail(400,'Недопустимый ход');
@@ -292,11 +292,11 @@ async function room(request, env, path, ctx) {
   const rematch = state.result && ready && !row.training
     ? await db.prepare('SELECT id FROM rooms WHERE previous = ?').bind(id).first()
     : null;
-  return Response.json({...state,id,game:row.game,side,ready,score,opponent,training:row.training,rules:row.rules,reason,
+  return Response.json({...state,id,game:row.game,side:row.training === 'local' ? state.turn : side,ready,score,opponent,training:row.training,rules:row.rules,reason,
     drawOffer:row.draw_offer === user ? 'sent' : row.draw_offer !== null ? 'received' : null,rematch:rematch?.id ?? null,
     offer:row.offer === user ? 'sent' : row.offer !== null ? 'received' : null,
     clock:{mode:row.clock,w:row.white_ms,b:row.black_ms,started:row.started_ms,now:Date.now()},lastMove:history.at(-1) ?? null,version:history.length,
-    moves:ready && !state.result && state.turn === side ? state.moves : [],
+    moves:ready && !state.result && (state.turn === side || row.training === 'local') ? state.moves : [],
     invite:'https://t.me/'+env.BOT_USERNAME+'?startapp='+id},{headers:{'Cache-Control':'no-store'}});
 }
 

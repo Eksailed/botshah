@@ -57,7 +57,8 @@
       <h2 id="setup-title"></h2>
       <label for="opponent-mode">С кем играть</label>
       <select id="opponent-mode">
-        <option value="friend">С другом</option>
+        <option value="friend">С другом по ссылке</option>
+        <option value="local">Вдвоём на одном телефоне</option>
         <option value="easy">Компьютер · лёгкий</option>
         <option value="normal">Компьютер · обычный</option>
       </select>
@@ -104,7 +105,7 @@
     <p id="feedback" role="status" hidden></p>
     <div id="self-panel" class="player-panel" hidden>
       <span class="player-disc" aria-hidden="true"></span>
-      <strong>Вы</strong><span id="self-turn" class="turn-mark" hidden>Ваш ход</span>
+      <strong id="self-name">Вы</strong><span id="self-turn" class="turn-mark" hidden>Ваш ход</span>
       <span id="self-clock" class="player-clock" hidden></span>
     </div>
     <div id="promotion" hidden aria-label="Выбор фигуры"></div>
