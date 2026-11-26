@@ -22,6 +22,26 @@ const letters = 'АБВГДЕЖЗИК';
 const coordinate = cell => letters[cell%10]+(Math.floor(cell/10)+1);
 const toolNames = {shot:'Выстрел',plane:'Самолёт',torpedo:'Подлодка',scan:'Сканер'};
 
+function shipCount(count) {
+  return count+' '+(count===1?'корабль':count>=2&&count<=4?'корабля':'кораблей');
+}
+function attackMessage(state) {
+  const last=state.lastAction;
+  if(!last)return '';
+  const incoming=last.side!==state.side;
+  const prefix=incoming?'Соперник · ':'';
+  if(last.kind==='scan') {
+    const scan=incoming?null:state.scans.at(-1);
+    return incoming?'Соперник использовал сканер':scan?'Сканер · '+scan.count+' целых палуб в области '+coordinate(scan.cell):'';
+  }
+  const hitCount=last.hitCount ?? (incoming
+    ? (state.fleet??[]).flat().filter(cell=>last.targets?.includes(cell)).length
+    : state.shots.filter(shot=>shot.hit&&last.targets?.includes(shot.cell)).length);
+  if(last.mineTriggered)return prefix+'Мина! Усиления заблокированы на один ход';
+  if(last.sunkCount)return prefix+(last.sunkCount===1?'Корабль потоплен!':last.sunkCount+' корабля потоплено!');
+  if(hitCount)return prefix+'Попадание!'+(hitCount>1?' Повреждено палуб: '+hitCount:'');
+  return prefix+'Мимо';
+}
 export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   let state, own=false, tool='shot', origin=null, direction='horizontal', edge='top';
   let fleet=[], mine=null, timer, busy=false, active=false, generation=0, message='';
@@ -44,8 +64,23 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     timer=setTimeout(async()=>{
       if (busy || document.hidden) { schedule();return; }
       const computer=state.training && state.phase==='battle' && state.turn==='b';
-      if (state.training && !computer) return;
-      await run(()=>api('/'+state.id+(computer?'/computer':''),computer?{version:state.version}:undefined));
+      if (computer) {
+        await run(()=>api('/'+state.id+'/computer',{version:state.version}));
+        return;
+      }
+      if (state.training) return;
+      const snapshot=state, currentGeneration=generation;
+      try {
+        const next=await api('/'+snapshot.id);
+        if (active && generation===currentGeneration && state===snapshot && !busy &&
+            (next.version!==snapshot.version || next.ready!==snapshot.ready)) await load(next);
+      } catch(error) {
+        if(active && generation===currentGeneration && state===snapshot && !busy && error.status===410) {
+          stop();onMenu();return;
+        }
+      } finally {
+        if(active && generation===currentGeneration)schedule();
+      }
     },1500);
   }
   async function run(action) {
@@ -130,9 +165,28 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     root.append(heading);
     if (!setup) {
       const summary=node('div',null,'naval-fleets');
-      const lost=(state.fleet??[]).filter(ship=>ship.every(cell=>state.incoming.includes(cell))).length;
-      summary.append(node('span',yours+' · '+(10-lost)+' кораблей'),node('span',opponent+' · '+(10-state.sunk.length)+' кораблей'));
+      for(const [name,sunk]of [[yours,(state.fleet??[]).filter(ship=>ship.every(cell=>state.incoming.includes(cell)))],[opponent,state.sunk]]){
+        const group=node('div',null,'naval-fleet-status');
+        group.append(node('span',name+' · '+shipCount(10-sunk.length)));
+        const tokens=node('div',null,'naval-fleet-tokens');
+        const removed=sunk.map(ship=>ship.length);
+        for(const size of sizes){
+          const token=node('span',null,'naval-fleet-token');
+          const index=removed.indexOf(size);
+          token.classList.toggle('lost',index!==-1);
+          token.style.setProperty('--decks',size);
+          token.setAttribute('aria-label',size+' палуб: '+(index===-1?'в строю':'потоплен'));
+          if(index!==-1)removed.splice(index,1);
+          tokens.append(token);
+        }
+        group.append(tokens);summary.append(group);
+      }
       root.append(summary);
+    }
+    const report=attackMessage(state);
+    if(report){
+      const feedback=node('p',report,'naval-attack-report');
+      feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');root.append(feedback);
     }
     if (message) root.append(node('p',message,'naval-message'));
     const controls=node('div',null,'naval-controls');
@@ -184,6 +238,9 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         element.classList.toggle('ship',self&&occupied||sunk||Boolean(state.result&&!self&&state.enemyFleet?.flat().includes(cell)));
         element.classList.toggle('hit',Boolean(hit));element.classList.toggle('sunk',sunk);
         element.classList.toggle('aim',!self&&aim.includes(cell));
+        const last=state.lastAction;
+        const onThisField=last && (self ? last.side!==state.side : last.side===state.side);
+        element.classList.toggle('last-attack',Boolean(!setup&&onThisField&&last.targets?.includes(cell)));
         board.append(element);
       }
     }

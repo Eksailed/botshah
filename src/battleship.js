@@ -79,7 +79,8 @@ export function act(original,side,action) {
         if((n===enemy.mine && !player.shots.includes(n)) || (enemy.fleet.flat().includes(n)&&!player.shots.includes(n))) break;
       }
     }
-    let hit=false,mine=false;
+    const sunkBefore=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))).length;
+    let hit=false,mine=false,hitCount=0;
     if(kind==='scan') {
       player.scans.push({cell:origin,count:targets.filter(n=>enemy.fleet.flat().includes(n)&&!player.shots.includes(n)).length,version:game.version+1});
     } else {
@@ -87,7 +88,9 @@ export function act(original,side,action) {
       for(const n of targets) {
         if(player.shots.includes(n))continue;
         player.shots.push(n);
-        hit ||= enemy.fleet.flat().includes(n);
+        const damaged=enemy.fleet.flat().includes(n);
+        if(damaged)hitCount++;
+        hit ||= damaged;
         mine ||= n===enemy.mine;
       }
     }
@@ -96,7 +99,8 @@ export function act(original,side,action) {
     if(!special&&!mine)player.blocked=false;
     if(enemy.fleet.flat().every(n=>player.shots.includes(n))){game.result=side;game.phase='finished';}
     else if(special||!hit||mine)game.turn=other(side);
-    game.lastAction={side,kind,targets,version:game.version+1};
+    const sunkAfter=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))).length;
+    game.lastAction={side,kind,targets,version:game.version+1,hitCount,sunkCount:sunkAfter-sunkBefore,mineTriggered:mine};
   }
   game.version++;
   return game;

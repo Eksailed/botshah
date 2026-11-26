@@ -74,3 +74,15 @@ test('Сканирование соперника скрывает област�
  assert.equal(playerView(game,enemy).lastAction.targets,undefined);
  game.result=side;assert.ok(playerView(game,side).enemyFleet);
 });
+
+test('Результат атаки различает попадание, потопление и промах',()=>{
+ let game=createBattle();
+ for(const side of ['w','b'])game=act(game,side,{kind:'place',fleet:autoFleet()});
+ const side=game.turn,enemy=side==='w'?'b':'w';
+ const single=game.players[enemy].fleet.find(ship=>ship.length===1)[0];
+ game=act(game,side,{kind:'shot',cell:single});
+ assert.equal(game.lastAction.hitCount,1);assert.equal(game.lastAction.sunkCount,1);
+ const miss=Array.from({length:100},(_,i)=>i).find(cell=>!game.players[enemy].fleet.flat().includes(cell));
+ game=act(game,side,{kind:'shot',cell:miss});
+ assert.equal(game.lastAction.hitCount,0);assert.equal(game.lastAction.sunkCount,0);
+});

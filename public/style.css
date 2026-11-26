@@ -823,3 +823,9 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-ship-model.destroyed { filter:grayscale(.8) brightness(.6); }
 #naval-game .naval-cell.ship { background:linear-gradient(145deg,#285451,#1b3e3c); box-shadow:none; }
 #naval-game .naval-cell.hit::after { content:'✕'; position:absolute; inset:0; display:grid; place-items:center; z-index:2; color:#ffcf83; text-shadow:0 1px 3px #30150a; }
+.naval-fleet-status { flex:1; min-width:0; }
+.naval-fleet-tokens { display:flex; gap:3px; align-items:end; height:17px; margin-top:4px; }
+.naval-fleet-token { width:8px; height:calc(4px + var(--decks) * 3px); border:1px solid #d6b978; border-radius:3px 3px 1px 1px; background:linear-gradient(#ccba90,#7e745b); }
+.naval-fleet-token.lost { opacity:.3; background:#79534a; border-color:#a27461; }
+.naval-attack-report { margin:6px 0; padding:7px 9px; border:1px solid #8c784c; border-radius:7px; background:#18372e; color:#ffe4a6; font-size:12px; }
+#naval-game .naval-cell.last-attack:not(.aim) { outline:1px solid #dfbd79; outline-offset:-2px; }
