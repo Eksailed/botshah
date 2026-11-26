@@ -80,7 +80,8 @@ function lobby() {
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const cell = index => el('board').children[state.side === 'b' ? 63-index : index];
+const boardSide = () => state.training === 'local' ? 'w' : state.side;
+const cell = index => el('board').children[boardSide() === 'b' ? 63-index : index];
 
 const moveSound = el('move-sound');
 const moveVibration = el('move-vibration');
@@ -345,16 +346,18 @@ function drawClocks() {
 function updateBoardFrame() {
   const panelHidden = Boolean(state.task || review);
   const playing = !panelHidden && state.ready && !state.result;
-  const white = state.side === 'w';
+  const white = boardSide() === 'w';
   el('self-panel').hidden = el('opponent-panel').hidden = panelHidden;
-  el('self-panel').dataset.side = state.side;
+  el('self-panel').dataset.side = boardSide();
   el('opponent-panel').dataset.side = white ? 'b' : 'w';
   const local = state.training === 'local';
-  el('self-name').textContent = local ? colorName(state.side) : 'Вы';
+  el('self-name').textContent = local ? colorName(boardSide()) : 'Вы';
   el('opponent-name').textContent = local ? colorName(white ? 'b' : 'w') : state.training ? 'Компьютер' : state.ready ? (state.opponent?.name ?? 'Соперник') : 'Место свободно';
-  el('self-turn').textContent = state.huff?.length ? 'Снимите шашку' : local ? 'Ходят '+colorName(state.turn).toLowerCase() : 'Ваш ход';
-  el('self-turn').hidden = !playing || state.turn !== state.side;
-  el('opponent-turn').hidden = !playing || state.turn === state.side;
+  const turnLabel = state.huff?.length ? 'Снимите шашку' : 'Ходят '+colorName(state.turn).toLowerCase();
+  el('self-turn').textContent = local ? turnLabel : state.huff?.length ? 'Снимите шашку' : 'Ваш ход';
+  el('opponent-turn').textContent = local ? turnLabel : 'Ход соперника';
+  el('self-turn').hidden = !playing || state.turn !== boardSide();
+  el('opponent-turn').hidden = !playing || state.turn === boardSide();
   el('status').classList.toggle('match-status',!state.task && !state.result && !(state.huff?.length && state.turn === state.side));
   for (const [id,values] of [['files',white ? 'abcdefgh' : 'hgfedcba'],['ranks',white ? '87654321' : '12345678']]) {
     if (el(id).textContent === values) continue;
@@ -381,7 +384,7 @@ function draw() {
   const display = review ?? state;
   const targets = new Set(state.moves.filter(m => m.from === selected).map(m => m.to));
   const squares = Array.from({length:64},(_,i) => {
-    const index = state.side === 'b' ? 63-i : i;
+    const index = boardSide() === 'b' ? 63-i : i;
     const piece = display.taken?.includes(index) ? null : display.board[index];
     const button = document.createElement('button');
     button.className = 'cell';
