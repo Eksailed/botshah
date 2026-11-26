@@ -143,10 +143,12 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     const aim=preview();
     const board=node('div',null,'naval-board');
     board.setAttribute('aria-label',self?'Своё поле':'Поле соперника');
-    board.append(node('span',''));
-    for(const letter of letters)board.append(node('span',letter,'naval-coordinate'));
+    const corner=node('span','');corner.style.gridArea='1 / 1';board.append(corner);
+    for(const [index,letter] of [...letters].entries()) {
+      const label=node('span',letter,'naval-coordinate');label.style.gridArea='1 / '+(index+2);board.append(label);
+    }
     for(let row=0;row<10;row++) {
-      board.append(node('span',String(row+1),'naval-coordinate'));
+      const label=node('span',String(row+1),'naval-coordinate');label.style.gridArea=(row+2)+' / 1';board.append(label);
       for(let col=0;col<10;col++) {
         const cell=row*10+col, shot=shots.get(cell), occupied=visibleFleet.flat().includes(cell);
         const incoming=state.incoming.includes(cell);
@@ -157,6 +159,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
           else {origin=cell;message='';draw();}
         },'naval-cell');
         element.dataset.cell=cell;
+        element.style.gridArea=(row+2)+' / '+(col+2);
         element.disabled=busy || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&shots.has(cell));
         element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':shot?'Промах':'Клетка'));
         element.classList.toggle('ship',self&&occupied||sunk||Boolean(state.result&&!self&&state.enemyFleet?.flat().includes(cell)));
@@ -164,6 +167,19 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         element.classList.toggle('aim',!self&&aim.includes(cell));
         board.append(element);
       }
+    }
+    const models=self?visibleFleet:state.result?(state.enemyFleet??[]):state.sunk;
+    for(const ship of models) {
+      const sorted=[...ship].sort((a,b)=>a-b);
+      const vertical=ship.length>1 && sorted[1]-sorted[0]===10;
+      const model=node('span',null,'naval-ship-model'+(vertical?' vertical':''));
+      model.setAttribute('aria-hidden','true');model.style.setProperty('--ship-length',ship.length);
+      model.style.gridColumn=(sorted[0]%10+2)+' / span '+(vertical?1:ship.length);
+      model.style.gridRow=(Math.floor(sorted[0]/10)+2)+' / span '+(vertical?ship.length:1);
+      const art=node('span',null,'naval-ship-art');art.dataset.size=ship.length;model.append(art);
+      const damaged=self?state.incoming:state.shots.filter(shot=>shot.hit).map(shot=>shot.cell);
+      model.classList.toggle('destroyed',ship.every(cell=>damaged.includes(cell)));
+      board.append(model);
     }
     root.append(board);
     const actions=node('div',null,'naval-actions');

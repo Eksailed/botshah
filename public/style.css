@@ -817,3 +817,13 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-burst { font-size:32px; animation:naval-burst 350ms ease-out both; }
 .naval-craft { font-size:26px; }
 @keyframes naval-burst { from { transform:translate(-50%,-50%) scale(.3);opacity:1; } to { transform:translate(-50%,-50%) scale(1.5);opacity:0; } }
+.naval-ship-model { position:relative; z-index:1; pointer-events:none; min-width:0; min-height:0; }
+.naval-ship-art { position:absolute; inset:0; background-image:url('/naval-ships.png'); background-repeat:no-repeat; filter:drop-shadow(0 1px 1px #081813); }
+.naval-ship-art[data-size='4'] { background-size:105.21% 325.08%; background-position:52.63% 3.53%; }
+.naval-ship-art[data-size='3'] { background-size:153.6% 426.67%; background-position:20.52% 45.92%; }
+.naval-ship-art[data-size='2'] { background-size:230.98% 585.14%; background-position:11.48% 74.2%; }
+.naval-ship-art[data-size='1'] { background-size:512% 758.52%; background-position:8.9% 95.61%; }
+.naval-ship-model.vertical .naval-ship-art { inset:auto; left:50%; top:50%; width:calc(100% * var(--ship-length)); height:calc(100% / var(--ship-length)); transform:translate(-50%,-50%) rotate(90deg); }
+.naval-ship-model.destroyed { filter:grayscale(.8) brightness(.6); }
+#naval-game .naval-cell.ship { background:linear-gradient(145deg,#285451,#1b3e3c); box-shadow:none; }
+#naval-game .naval-cell.hit::after { content:'✕'; position:absolute; inset:0; display:grid; place-items:center; z-index:2; color:#ffcf83; text-shadow:0 1px 3px #30150a; }
