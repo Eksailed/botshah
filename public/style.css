@@ -761,7 +761,7 @@ dialog button:not(.brass) {
 main:has(#naval-game:not([hidden])) { padding:8px; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
 main:has(#naval-game:not([hidden])) h1 { font-size:24px; }
 main:has(#naval-game:not([hidden])) #status { display:none; }
-#naval-game { min-height:0; overflow:auto; flex:1; padding:6px 0 12px; scrollbar-width:thin; }
+#naval-game { min-height:0; overflow:auto; flex:1; padding:6px 0 12px; scrollbar-width:none; }
 #naval-game button,#naval-game select {
   min-height:38px; padding:8px 10px; border:1px solid #9c804d; border-radius:9px;
   background:linear-gradient(145deg,#304d3e,#19332b); color:#ffedc6;
@@ -856,3 +856,5 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-ship-model.selected-ship { outline:1px solid #eed18c; outline-offset:-1px; border-radius:4px; }
 @media (prefers-reduced-motion:reduce) { .naval-reticle { animation:none; } .naval-fleet-status { transition:none; } }
 .naval-ship-model.destroyed { opacity:.7; }
+
+#naval-game::-webkit-scrollbar { display:none; width:0; height:0; }
