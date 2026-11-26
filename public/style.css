@@ -830,8 +830,11 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 #naval-game .naval-cell.last-attack:not(.aim) { outline:1px solid #dfbd79; outline-offset:-2px; }
 
 .naval-marker { position:absolute; left:50%; top:50%; pointer-events:none; border-radius:50%; z-index:2; transform:translate(-50%,-50%); }
-.naval-miss { width:48%; height:48%; border:1px solid #a0dce9; box-shadow:0 0 0 2px #6eb6ca33,inset 0 0 0 2px #6eb6ca44; background:radial-gradient(circle,#e1f8ff 0 12%,#84cfe555 14% 27%,transparent 30%); }
 .naval-clear-water { width:38%; height:38%; border:1px solid #79b3ba66; box-shadow:0 0 0 2px #62a4b011; background:transparent; }
-.naval-ember { width:54%; height:54%; border:1px solid #472016; background:radial-gradient(circle,#fff5c2 0 9%,#ffbe45 12% 22%,#d75b1c 26% 38%,#4a2119 46% 66%,#1a1c16 72%); box-shadow:0 0 4px #ed86294d,inset 1px 1px 2px #160d0b; }
 #naval-game .naval-cell.hit { background:linear-gradient(145deg,#285451,#1b3e3c); }
 .naval-ship-model.destroyed { filter:grayscale(.7) brightness(.65); }
+
+.naval-miss,.naval-fire,.naval-wreck { width:100%; height:100%; border-radius:0; border:0; background-image:url('/naval-effects.png'); background-repeat:no-repeat; background-size:300% 100%; box-shadow:none; }
+.naval-miss { background-position:left center; }
+.naval-fire { background-position:center; }
+.naval-wreck { width:80%; height:80%; background-image:url('/naval-effects.png'),radial-gradient(circle,#07110c 0 25%,transparent 29%); background-size:300% 100%,100% 100%; background-position:right center,center; }

@@ -227,7 +227,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         const cell=row*10+col, shot=shots.get(cell), occupied=visibleFleet.flat().includes(cell);
         const incoming=state.incoming.includes(cell);
         const hit=self?incoming&&occupied:shot?.hit;
-        const sunk=!self&&state.sunk.flat().includes(cell);
+        const sunk=self?visibleFleet.some(ship=>ship.includes(cell)&&ship.every(deck=>state.incoming.includes(deck))):state.sunk.flat().includes(cell);
         const element=button(setup&&cell===mine?'◆':'',()=>{
           if(setup)place(cell);
           else {origin=cell;message='';draw();}
@@ -240,7 +240,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         element.classList.toggle('hit',Boolean(hit));element.classList.toggle('sunk',sunk);
         const missed=self?incoming&&!occupied:Boolean(shot&&!shot.hit);
         if(!setup&&(hit||missed||water.has(cell))){
-          const marker=node('span',null,'naval-marker '+(hit?'naval-ember':missed?'naval-miss':'naval-clear-water'));
+          const marker=node('span',null,'naval-marker '+(hit?(sunk?'naval-wreck':'naval-fire'):missed?'naval-miss':'naval-clear-water'));
           marker.setAttribute('aria-hidden','true');element.append(marker);
         }
         element.classList.toggle('aim',!self&&aim.includes(cell));
