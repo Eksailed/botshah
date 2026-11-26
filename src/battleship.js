@@ -106,7 +106,8 @@ export function act(original,side,action) {
     if(enemy.fleet.flat().every(n=>player.shots.includes(n))){game.result=side;game.phase='finished';}
     else if(game.turnRule==='alternating'||special||!hit||mine)game.turn=other(side);
     const sunkAfter=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))).length;
-    game.lastAction={side,kind,targets,version:game.version+1,hitCount,sunkCount:sunkAfter-sunkBefore,mineTriggered:mine};
+    const sunkShips=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))&&!ship.every(cell=>original.players[side].shots.includes(cell)));
+    game.lastAction={side,kind,targets,version:game.version+1,hitCount,sunkCount:sunkAfter-sunkBefore,sunkShips,mineTriggered:mine};
   }
   game.version++;
   return game;

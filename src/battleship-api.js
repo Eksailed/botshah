@@ -102,7 +102,7 @@ export async function battleshipAPI(request, env, user, input, id, action) {
   }
   const currentSide = local ? state.localSide : ownerSide;
   const locked = local && !state.localReady && !state.result;
-  const view = locked ? {phase:state.phase,mode:state.mode,turnRule:state.turnRule,turn:state.turn,result:null,version:state.version,handoff:true} : playerView(state,currentSide);
+  const view = locked ? {phase:state.phase,mode:state.mode,turnRule:state.turnRule,turn:state.turn,result:null,version:state.version,handoff:true,lastAction:state.lastAction?.kind==='shot'?state.lastAction:null} : playerView(state,currentSide);
   const opponentId = ownerSide === 'w' ? row.black : row.white;
   const opponent = !row.training && opponentId ? await db.prepare('SELECT name FROM players WHERE id=?').bind(opponentId).first() : null;
   const score = !row.training && row.black !== null ? await db.prepare("SELECT count(CASE WHEN result=CASE WHEN white=?1 THEN 'w' ELSE 'b' END THEN 1 END) AS wins, count(CASE WHEN result=CASE WHEN white=?1 THEN 'b' ELSE 'w' END THEN 1 END) AS losses FROM rooms WHERE game='battleship' AND training IS NULL AND result IN ('w','b') AND ((white=?1 AND black=?2) OR (white=?2 AND black=?1))").bind(user,opponentId).first() : null;

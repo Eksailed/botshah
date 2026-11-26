@@ -319,6 +319,12 @@ async function animateTicTacToe(next,placed,finished) {
 }
 
 function navalSound(kind) {
+  if(!document.hidden&&['hit','win'].includes(kind)&&moveVibration.checked){
+    try {
+      if(tg?.HapticFeedback?.impactOccurred)tg.HapticFeedback.impactOccurred('light');
+      else navigator.vibrate?.(15);
+    } catch {}
+  }
   if (!moveSound.checked || moveAudio?.state !== 'running' || document.hidden) return;
   const patterns = {
     splash:[[180,0,.035,.18],[280,.04,.02,.18]],
@@ -341,9 +347,7 @@ function navalSound(kind) {
     tone.onended=()=>{tone.disconnect();gain.disconnect();};
     tone.start(start);tone.stop(start+duration+.01);
   }
-  if (['hit','win'].includes(kind)&&moveVibration.checked) {
-    try { tg?.HapticFeedback?.impactOccurred('light'); } catch {}
-  }
+
 }
 let naval;
 async function show(next) {

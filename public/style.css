@@ -802,7 +802,7 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-handoff h2,.naval-handoff p { margin:0; }
 .naval-handoff h2 { font:700 25px var(--font-display); }
 .naval-anchor { font-size:54px; color:#e4c17c; }
-.naval-result { padding:16px; border:1px solid #ba9656; border-radius:14px; text-align:center; background:linear-gradient(140deg,#34503c,#152d23); animation:result-sheet 240ms ease-out both; }
+.naval-result { padding:16px; border:1px solid #ba9656; border-radius:14px; text-align:center; background:linear-gradient(140deg,#34503c,#152d23); animation:none; }
 .naval-result h2 { color:#f4d99a; font:700 27px var(--font-display); margin:0 0 12px; }
 .naval-result button { margin:4px; }
 .naval-effect-shot { animation:naval-impact 240ms ease-out; }
@@ -845,3 +845,14 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-mini-map .deck { background:#c8ba92; }
 .naval-mini-map .damaged { background:#d76032; }
 .naval-mini-map .miss { background:#9bc8cf; }
+
+.naval-reticle { position:absolute; inset:14%; pointer-events:none; z-index:3; background:linear-gradient(#ffedb0,#ffedb0) top left/30% 2px no-repeat,linear-gradient(#ffedb0,#ffedb0) top left/2px 30% no-repeat,linear-gradient(#ffedb0,#ffedb0) top right/30% 2px no-repeat,linear-gradient(#ffedb0,#ffedb0) top right/2px 30% no-repeat,linear-gradient(#ffedb0,#ffedb0) bottom left/30% 2px no-repeat,linear-gradient(#ffedb0,#ffedb0) bottom left/2px 30% no-repeat,linear-gradient(#ffedb0,#ffedb0) bottom right/30% 2px no-repeat,linear-gradient(#ffedb0,#ffedb0) bottom right/2px 30% no-repeat; animation:naval-aim-in 120ms ease-out; }
+@keyframes naval-aim-in { from { transform:scale(1.3);opacity:0; } to { transform:scale(1);opacity:1; } }
+.naval-shot-trail { position:absolute; width:22px; height:2px; border-radius:3px; pointer-events:none; z-index:4; background:linear-gradient(90deg,transparent,#fff1bd); box-shadow:0 0 4px #ffdf9a; }
+.naval-hit-flash { position:absolute; inset:8%; border-radius:50%; pointer-events:none; z-index:4; background:radial-gradient(#fff6c3,#ffa33a66 45%,transparent 70%); }
+.naval-fleet-status { border-radius:5px; padding:3px; transition:background-color 180ms ease-out,box-shadow 180ms ease-out; }
+.naval-current-turn { background:#5d724a44; box-shadow:inset 0 -2px #e0bd72; }
+#naval-game .naval-cell.naval-invalid { outline:2px solid #d57659; outline-offset:-3px; }
+.naval-ship-model.selected-ship { outline:1px solid #eed18c; outline-offset:-1px; border-radius:4px; }
+@media (prefers-reduced-motion:reduce) { .naval-reticle { animation:none; } .naval-fleet-status { transition:none; } }
+.naval-ship-model.destroyed { opacity:.7; }

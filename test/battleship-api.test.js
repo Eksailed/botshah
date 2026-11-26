@@ -46,6 +46,12 @@ test('Передача телефона скрывает флот до подт�
  a=await call(11,{kind:'place',fleet:autoFleet(),version:a.version},id,'move');
  if(a.handoff)a=await call(11,{version:a.version},id,'handoff');
  assert.equal(a.phase,'battle');assert.ok(a.fleet);assert.equal(a.enemyFleet,undefined);
+ const internal=JSON.parse(sql.prepare('SELECT state FROM battleship_states WHERE room_id=?').get(id).state);
+ const opponent=internal.localSide==='w'?'b':'w';
+ const miss=Array.from({length:100},(_,i)=>i).find(cell=>!internal.players[opponent].fleet.flat().includes(cell));
+ a=await call(11,{kind:'shot',cell:miss,version:a.version},id,'move');
+ assert.equal(a.handoff,true);assert.equal(a.fleet,undefined);assert.equal(a.incoming,undefined);
+ assert.deepEqual(a.lastAction.targets,[miss]);assert.equal(a.lastAction.hitCount,0);assert.deepEqual(a.lastAction.sunkShips,[]);
  }finally{sql.close()}
 });
 test('Компьютер совершает допустимые ходы и партия сохраняется',async()=>{

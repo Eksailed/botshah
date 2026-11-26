@@ -105,8 +105,8 @@ test('Вода вокруг потопленного корабля отмеча
 test('Раненый корабль скрывает окрестности, потопленный у угла отмечает только допустимые клетки',()=>{
  let game=createBattle();game.phase='battle';game.turn='w';
  game.players.w.fleet=[[99]];game.players.b.fleet=[[0,1]];
- game=act(game,'w',{kind:'shot',cell:0});assert.deepEqual(playerView(game,'w').water,[]);
- game=act(game,'w',{kind:'shot',cell:1});assert.deepEqual(playerView(game,'w').water,[2,10,11,12]);
+ game=act(game,'w',{kind:'shot',cell:0});assert.deepEqual(playerView(game,'w').water,[]);assert.deepEqual(game.lastAction.sunkShips,[]);
+ game=act(game,'w',{kind:'shot',cell:1});assert.deepEqual(playerView(game,'w').water,[2,10,11,12]);assert.deepEqual(game.lastAction.sunkShips,[[0,1]]);
  assert.deepEqual(game.players.w.shots,[0,1]);assert.equal(game.turn,'w');
 });
 

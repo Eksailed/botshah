@@ -12,6 +12,7 @@ const assets = new Map([
   ['/tictactoe-tile.jpg',['tictactoe-tile.jpg','image/jpeg']],
   ['/naval-effects.png',['naval-effects.png','image/png']],
   ['/naval-ships.png',['naval-ships.png','image/png']],
+  ['/naval-animation.js',['naval-animation.js','text/javascript']],
   ['/battleship.js',['battleship.js','text/javascript']],
   ['/battleship-tile.jpg',['battleship-tile.jpg','image/jpeg']],
   ['/inline-battleship.jpg',['inline-battleship.jpg','image/jpeg']],
