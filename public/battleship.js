@@ -228,7 +228,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         const incoming=state.incoming.includes(cell);
         const hit=self?incoming&&occupied:shot?.hit;
         const sunk=!self&&state.sunk.flat().includes(cell);
-        const element=button(self?(incoming?(occupied?'✕':'·'):occupied?'':cell===(setup?mine:state.mine)?'◆':water.has(cell)?'·':''):(shot?(shot.hit?'✕':'·'):water.has(cell)?'·':''),()=>{
+        const element=button(setup&&cell===mine?'◆':'',()=>{
           if(setup)place(cell);
           else {origin=cell;message='';draw();}
         },'naval-cell');
@@ -238,6 +238,11 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':water.has(cell)?'Вода вокруг потопленного корабля':shot?'Промах':'Клетка'));
         element.classList.toggle('ship',self&&occupied||sunk||Boolean(state.result&&!self&&state.enemyFleet?.flat().includes(cell)));
         element.classList.toggle('hit',Boolean(hit));element.classList.toggle('sunk',sunk);
+        const missed=self?incoming&&!occupied:Boolean(shot&&!shot.hit);
+        if(!setup&&(hit||missed||water.has(cell))){
+          const marker=node('span',null,'naval-marker '+(hit?'naval-ember':missed?'naval-miss':'naval-clear-water'));
+          marker.setAttribute('aria-hidden','true');element.append(marker);
+        }
         element.classList.toggle('aim',!self&&aim.includes(cell));
         const last=state.lastAction;
         const onThisField=last && (self ? last.side!==state.side : last.side===state.side);
@@ -308,6 +313,13 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
       sound(last.kind==='scan'?'scan':last.kind==='plane'?'plane':last.kind==='torpedo'?'torpedo':mineHit?'hit':'splash');
     }
     draw();
+    if(animate&&!reduced.matches&&!next.handoff&&last.sunkCount){
+      const wasWater=new Set(own?(previous.incomingWater??[]):(previous.water??[]));
+      for(const marker of root.querySelectorAll('.naval-clear-water')){
+        if(wasWater.has(Number(marker.parentElement.dataset.cell)))continue;
+        marker.animate([{transform:'translate(-50%,-50%) scale(.2)',opacity:0},{transform:'translate(-50%,-50%) scale(1.2)',opacity:.7,offset:.65},{transform:'translate(-50%,-50%) scale(1)',opacity:1}],{duration:380,easing:'ease-out'});
+      }
+    }
     if(animate&&!reduced.matches&&!next.handoff) {
       const board=root.querySelector('.naval-board');
       const effects=[];
