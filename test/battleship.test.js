@@ -109,3 +109,12 @@ test('Раненый корабль скрывает окрестности, п�
  game=act(game,'w',{kind:'shot',cell:1});assert.deepEqual(playerView(game,'w').water,[2,10,11,12]);
  assert.deepEqual(game.players.w.shots,[0,1]);assert.equal(game.turn,'w');
 });
+
+test('Очередь по одному выстрелу передаёт ход даже после попадания',()=>{
+ let game=createBattle('classic','alternating');
+ for(const side of ['w','b'])game=act(game,side,{kind:'place',fleet:autoFleet()});
+ const side=game.turn,enemy=side==='w'?'b':'w';
+ game=act(game,side,{kind:'shot',cell:game.players[enemy].fleet[0][0]});
+ assert.equal(game.turn,enemy);assert.equal(playerView(game,side).turnRule,'alternating');
+ assert.throws(()=>createBattle('classic','unknown'));
+});

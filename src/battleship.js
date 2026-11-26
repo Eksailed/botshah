@@ -37,10 +37,11 @@ export function autoFleet() {
   }
 }
 
-export function createBattle(mode='classic') {
+export function createBattle(mode='classic',turnRule='until-miss') {
+  requireRule(['until-miss','alternating'].includes(turnRule),'Выберите очередь выстрелов');
   requireRule(['classic','arsenal'].includes(mode),'Неизвестный режим');
   const player = () => ({fleet:null,mine:null,shots:[],scans:[],blocked:false,stock:{plane:1,torpedo:1,scan:2}});
-  return {mode,phase:'setup',turn:Math.random()<.5?'w':'b',players:{w:player(),b:player()},result:null,version:0};
+  return {mode,turnRule,phase:'setup',turn:Math.random()<.5?'w':'b',players:{w:player(),b:player()},result:null,version:0};
 }
 
 function surroundingWater(fleet,shots) {
@@ -103,7 +104,7 @@ export function act(original,side,action) {
     player.blocked=mine;
     if(!special&&!mine)player.blocked=false;
     if(enemy.fleet.flat().every(n=>player.shots.includes(n))){game.result=side;game.phase='finished';}
-    else if(special||!hit||mine)game.turn=other(side);
+    else if(game.turnRule==='alternating'||special||!hit||mine)game.turn=other(side);
     const sunkAfter=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))).length;
     game.lastAction={side,kind,targets,version:game.version+1,hitCount,sunkCount:sunkAfter-sunkBefore,mineTriggered:mine};
   }
@@ -114,7 +115,7 @@ export function act(original,side,action) {
 export function playerView(game,side) {
   const player=game.players[side],enemy=game.players[other(side)];
   const sunk=(enemy.fleet??[]).filter(ship=>ship.every(n=>player.shots.includes(n)));
-  return {phase:game.phase,mode:game.mode,turn:game.turn,result:game.result,version:game.version,
+  return {phase:game.phase,mode:game.mode,turnRule:game.turnRule??'until-miss',turn:game.turn,result:game.result,version:game.version,
     placed:Boolean(player.fleet),opponentReady:Boolean(enemy.fleet),fleet:player.fleet,mine:player.mine,
     incoming:enemy.shots,shots:player.shots.map(cell=>({cell,hit:enemy.fleet?.flat().includes(cell)??false})),
     water:surroundingWater(enemy.fleet,player.shots),incomingWater:surroundingWater(player.fleet,enemy.shots),

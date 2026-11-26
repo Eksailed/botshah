@@ -838,3 +838,10 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-miss { background-position:left center; }
 .naval-fire { background-position:center; }
 .naval-wreck { width:80%; height:80%; background-image:url('/naval-effects.png'),radial-gradient(circle,#07110c 0 25%,transparent 29%); background-size:300% 100%,100% 100%; background-position:right center,center; }
+.naval-overview { margin:5px 0; }
+#naval-game .naval-overview button { display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:6px 10px; }
+.naval-mini-map { display:grid; grid-template-columns:repeat(10,5px); gap:1px; padding:3px; border:1px solid #8d8059; background:#18342e; }
+.naval-mini-map i { width:5px; height:5px; background:#2c5550; }
+.naval-mini-map .deck { background:#c8ba92; }
+.naval-mini-map .damaged { background:#d76032; }
+.naval-mini-map .miss { background:#9bc8cf; }

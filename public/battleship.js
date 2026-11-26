@@ -163,6 +163,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     const heading=node('div',null,'naval-heading');
     heading.append(node('strong',status),node('span',state.mode==='arsenal'?'Арсенал':'Классика'));
     root.append(heading);
+    root.append(node('p',state.turnRule==='alternating'?'Ходы по очереди · один выстрел':'Попадание даёт дополнительный выстрел','naval-help'));
     if (!setup) {
       const summary=node('div',null,'naval-fleets');
       for(const [name,sunk]of [[yours,(state.fleet??[]).filter(ship=>ship.every(cell=>state.incoming.includes(cell)))],[opponent,state.sunk]]){
@@ -182,6 +183,19 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         group.append(tokens);summary.append(group);
       }
       root.append(summary);
+      if(state.phase!=='setup'&&!own){
+        const overview=node('div',null,'naval-overview');
+        const toggle=button('Свой флот · открыть',()=>{own=true;origin=null;draw();});
+        const map=node('span',null,'naval-mini-map');map.setAttribute('aria-hidden','true');
+        for(let cell=0;cell<100;cell++){
+          const peg=node('i');
+          peg.classList.toggle('deck',(state.fleet??[]).flat().includes(cell));
+          peg.classList.toggle('damaged',state.incoming.includes(cell)&&(state.fleet??[]).flat().includes(cell));
+          peg.classList.toggle('miss',state.incoming.includes(cell)&&!(state.fleet??[]).flat().includes(cell));
+          map.append(peg);
+        }
+        toggle.prepend(map);overview.append(toggle);root.append(overview);
+      }
     }
     const report=attackMessage(state);
     if(report){

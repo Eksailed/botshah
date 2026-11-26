@@ -4,8 +4,8 @@ import { roomId } from './play.js';
 import { fail } from './telegram.js';
 
 const opposite = side => side === 'w' ? 'b' : 'w';
-function freshState(training) {
-  let state = createBattle('classic');
+function freshState(training,turnRule='until-miss') {
+  let state = createBattle('classic',turnRule);
   if (training === 'local') Object.assign(state,{localSide:'w',localReady:false});
   if (training && training !== 'local') {
     const fleet = autoFleet();
@@ -22,7 +22,8 @@ export async function battleshipAPI(request, env, user, input, id, action) {
     if (!['classic','arsenal'].includes(input.mode ?? 'classic')) fail(400,'Выберите правила');
     if (input.clock && input.clock !== 'none') fail(400,'Морской бой идёт без часов');
     id = roomId();
-    const state = freshState(training);
+    if(!['until-miss','alternating'].includes(input.turnRule??'until-miss'))fail(400,'Выберите очередь выстрелов');
+    const state = freshState(training,input.turnRule);
     await db.batch([
       db.prepare("INSERT INTO rooms(id,game,white,black,training,clock,rules,turn,updated_at) VALUES (?,'battleship',?,?,?,'none','huff',?,?)").bind(id,user,training ? 0 : null,training,state.turn,Date.now()),
       db.prepare('INSERT INTO battleship_states(room_id,version,state) VALUES (?,?,?)').bind(id,state.version,JSON.stringify(state))
@@ -58,7 +59,7 @@ export async function battleshipAPI(request, env, user, input, id, action) {
   if (action && !post) fail(405,'Используйте POST');
   if (action === 'rematch') {
     if (!state.result || row.black === null) fail(403,'Сначала закончите партию');
-    const nextId = roomId(), next = freshState(row.training);
+    const nextId = roomId(), next = freshState(row.training,state.turnRule);
     await db.batch([
       db.prepare("INSERT OR IGNORE INTO rooms(id,game,white,black,training,clock,rules,turn,previous,updated_at) VALUES (?,'battleship',?,?,?,'none','huff',?,?,?)").bind(nextId,row.white,row.black,row.training,next.turn,id,Date.now()),
       db.prepare('INSERT OR IGNORE INTO battleship_states(room_id,version,state) SELECT id,?,? FROM rooms WHERE id=?').bind(next.version,JSON.stringify(next),nextId)
@@ -101,7 +102,7 @@ export async function battleshipAPI(request, env, user, input, id, action) {
   }
   const currentSide = local ? state.localSide : ownerSide;
   const locked = local && !state.localReady && !state.result;
-  const view = locked ? {phase:state.phase,mode:state.mode,turn:state.turn,result:null,version:state.version,handoff:true} : playerView(state,currentSide);
+  const view = locked ? {phase:state.phase,mode:state.mode,turnRule:state.turnRule,turn:state.turn,result:null,version:state.version,handoff:true} : playerView(state,currentSide);
   const opponentId = ownerSide === 'w' ? row.black : row.white;
   const opponent = !row.training && opponentId ? await db.prepare('SELECT name FROM players WHERE id=?').bind(opponentId).first() : null;
   const score = !row.training && row.black !== null ? await db.prepare("SELECT count(CASE WHEN result=CASE WHEN white=?1 THEN 'w' ELSE 'b' END THEN 1 END) AS wins, count(CASE WHEN result=CASE WHEN white=?1 THEN 'b' ELSE 'w' END THEN 1 END) AS losses FROM rooms WHERE game='battleship' AND training IS NULL AND result IN ('w','b') AND ((white=?1 AND black=?2) OR (white=?2 AND black=?1))").bind(user,opponentId).first() : null;

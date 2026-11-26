@@ -61,6 +61,8 @@
   <dialog id="setup">
     <form method="dialog">
       <h2 id="setup-title"></h2>
+      <label id="naval-turn-label" for="naval-turn-rule" hidden>Очередь выстрелов</label>
+      <select id="naval-turn-rule" hidden><option value="until-miss">До первого промаха</option><option value="alternating">По одному выстрелу</option></select>
       <label for="opponent-mode">С кем играть</label>
       <select id="opponent-mode">
         <option value="friend">С другом по ссылке</option>
