@@ -43,6 +43,11 @@ export function createBattle(mode='classic') {
   return {mode,phase:'setup',turn:Math.random()<.5?'w':'b',players:{w:player(),b:player()},result:null,version:0};
 }
 
+function surroundingWater(fleet,shots) {
+  const sunk=(fleet??[]).filter(ship=>ship.every(cell=>shots.includes(cell))).flat();
+  return Array.from({length:100},(_,cell)=>cell).filter(cell=>!sunk.includes(cell)&&sunk.some(deck=>adjacent(cell,deck)));
+}
+
 export function act(original,side,action) {
   requireRule(side==='w'||side==='b','Неизвестный игрок');
   const game=structuredClone(original), player=game.players[side], enemy=game.players[other(side)];
@@ -84,7 +89,7 @@ export function act(original,side,action) {
     if(kind==='scan') {
       player.scans.push({cell:origin,count:targets.filter(n=>enemy.fleet.flat().includes(n)&&!player.shots.includes(n)).length,version:game.version+1});
     } else {
-      if(!special) requireRule(!player.shots.includes(origin),'Вы уже стреляли сюда');
+      if(!special) requireRule(!player.shots.includes(origin)&&!surroundingWater(enemy.fleet,player.shots).includes(origin),'Эта клетка уже отмечена');
       for(const n of targets) {
         if(player.shots.includes(n))continue;
         player.shots.push(n);
@@ -112,6 +117,7 @@ export function playerView(game,side) {
   return {phase:game.phase,mode:game.mode,turn:game.turn,result:game.result,version:game.version,
     placed:Boolean(player.fleet),opponentReady:Boolean(enemy.fleet),fleet:player.fleet,mine:player.mine,
     incoming:enemy.shots,shots:player.shots.map(cell=>({cell,hit:enemy.fleet?.flat().includes(cell)??false})),
+    water:surroundingWater(enemy.fleet,player.shots),incomingWater:surroundingWater(player.fleet,enemy.shots),
     sunk,scans:player.scans,stock:player.stock,blocked:player.blocked,
     ...(game.result?{enemyFleet:enemy.fleet}:{}),lastAction:game.lastAction?.kind === 'scan' && game.lastAction.side !== side ? {side:game.lastAction.side,kind:'scan'} : game.lastAction};
 }

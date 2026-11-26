@@ -1,6 +1,6 @@
 // На вход поступает только то представление поля, которое доступно игроку.
 export function navalComputerMove(view, level) {
-  const fired = new Set(view.shots.map(shot => shot.cell));
+  const fired = new Set([...view.shots.map(shot => shot.cell),...(view.water??[])]);
   const sunk = new Set(view.sunk.flat());
   const hits = view.shots.filter(shot => shot.hit && !sunk.has(shot.cell));
   const adjacent = cell => hits.some(hit => Math.abs(hit.cell-cell) === 10 ||

@@ -82,7 +82,30 @@ test('Результат атаки различает попадание, по�
  const single=game.players[enemy].fleet.find(ship=>ship.length===1)[0];
  game=act(game,side,{kind:'shot',cell:single});
  assert.equal(game.lastAction.hitCount,1);assert.equal(game.lastAction.sunkCount,1);
- const miss=Array.from({length:100},(_,i)=>i).find(cell=>!game.players[enemy].fleet.flat().includes(cell));
+ const miss=Array.from({length:100},(_,i)=>i).find(cell=>!game.players[enemy].fleet.flat().includes(cell)&&!playerView(game,side).water.includes(cell));
  game=act(game,side,{kind:'shot',cell:miss});
  assert.equal(game.lastAction.hitCount,0);assert.equal(game.lastAction.sunkCount,0);
+});
+
+test('Вода вокруг потопленного корабля отмечается, включая углы и границы поля',()=>{
+ let game=createBattle();
+ for(const side of ['w','b'])game=act(game,side,{kind:'place',fleet:autoFleet()});
+ const side=game.turn,enemy=side==='w'?'b':'w';
+ const ship=game.players[enemy].fleet[0];
+ for(const cell of ship)game=act(game,side,{kind:'shot',cell});
+ const water=playerView(game,side).water;
+ const expected=Array.from({length:100},(_,i)=>i).filter(cell=>!ship.includes(cell)&&ship.some(n=>Math.abs(cell%10-n%10)<=1&&Math.abs(Math.floor(cell/10)-Math.floor(n/10))<=1));
+ assert.deepEqual([...water].sort((a,b)=>a-b),expected);
+ assert.equal(game.turn,side);
+ assert.throws(()=>act(game,side,{kind:'shot',cell:water[0]}));
+ assert.ok(playerView(game,enemy).incomingWater.includes(water[0]));
+ assert.ok(!water.some(cell=>game.players[enemy].fleet.flat().includes(cell)));
+});
+
+test('Раненый корабль скрывает окрестности, потопленный у угла отмечает только допустимые клетки',()=>{
+ let game=createBattle();game.phase='battle';game.turn='w';
+ game.players.w.fleet=[[99]];game.players.b.fleet=[[0,1]];
+ game=act(game,'w',{kind:'shot',cell:0});assert.deepEqual(playerView(game,'w').water,[]);
+ game=act(game,'w',{kind:'shot',cell:1});assert.deepEqual(playerView(game,'w').water,[2,10,11,12]);
+ assert.deepEqual(game.players.w.shots,[0,1]);assert.equal(game.turn,'w');
 });

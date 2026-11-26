@@ -55,7 +55,7 @@ test('Компьютер совершает допустимые ходы и п�
  a=await call(11,{kind:'place',fleet,mine,version:a.version},id,'move');
  for(let i=0;i<220&&!a.result;i++){
   if(a.turn==='b')a=await call(11,{version:a.version},id,'computer');
-  else{const cell=Array.from({length:100},(_,i)=>i).find(i=>!a.shots.some(s=>s.cell===i));a=await call(11,{kind:'shot',cell,version:a.version},id,'move');}
+  else{const cell=Array.from({length:100},(_,i)=>i).find(i=>!a.shots.some(s=>s.cell===i)&&!a.water.includes(i));a=await call(11,{kind:'shot',cell,version:a.version},id,'move');}
  }
  assert.ok(a.result);assert.equal((await call(11,{},id,undefined,'GET')).result,a.result);
  }finally{sql.close()}

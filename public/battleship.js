@@ -213,6 +213,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     const self=setup||own||state.phase==='setup';
     const visibleFleet=setup?fleet:state.fleet??[];
     const shots=new Map(state.shots.map(s=>[s.cell,s]));
+    const water=new Set(self?(state.incomingWater??[]):(state.water??[]));
     const aim=preview();
     const board=node('div',null,'naval-board');
     board.setAttribute('aria-label',self?'Своё поле':'Поле соперника');
@@ -227,14 +228,14 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         const incoming=state.incoming.includes(cell);
         const hit=self?incoming&&occupied:shot?.hit;
         const sunk=!self&&state.sunk.flat().includes(cell);
-        const element=button(self?(incoming?(occupied?'✕':'·'):occupied?'':cell===(setup?mine:state.mine)?'◆':''):(shot?(shot.hit?'✕':'·'):''),()=>{
+        const element=button(self?(incoming?(occupied?'✕':'·'):occupied?'':cell===(setup?mine:state.mine)?'◆':water.has(cell)?'·':''):(shot?(shot.hit?'✕':'·'):water.has(cell)?'·':''),()=>{
           if(setup)place(cell);
           else {origin=cell;message='';draw();}
         },'naval-cell');
         element.dataset.cell=cell;
         element.style.gridArea=(row+2)+' / '+(col+2);
-        element.disabled=busy || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&shots.has(cell));
-        element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':shot?'Промах':'Клетка'));
+        element.disabled=busy || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&(shots.has(cell)||water.has(cell)));
+        element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':water.has(cell)?'Вода вокруг потопленного корабля':shot?'Промах':'Клетка'));
         element.classList.toggle('ship',self&&occupied||sunk||Boolean(state.result&&!self&&state.enemyFleet?.flat().includes(cell)));
         element.classList.toggle('hit',Boolean(hit));element.classList.toggle('sunk',sunk);
         element.classList.toggle('aim',!self&&aim.includes(cell));

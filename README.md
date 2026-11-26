@@ -59,3 +59,5 @@ npm test
 4. В BotFather укажите HTTPS адрес Worker для Main Mini App. Настройте [вебхук Telegram](https://core.telegram.org/bots/api#setwebhook) на путь `/telegram` с тем же `WEBHOOK_SECRET`. Включите обновления `message` и `inline_query`.
 
 [wrangler.jsonc](wrangler.jsonc) описывает старого бота проекта, [wrangler.play.jsonc](wrangler.play.jsonc) — основного. Оба опубликованных бота подключены к одной базе партий.
+
+После потопления корабля все соседние клетки, включая диагональные, автоматически отмечаются как вода и закрываются для выстрелов. Попадание по последней палубе сохраняет ход. Раненый корабль не раскрывает окрестности.
