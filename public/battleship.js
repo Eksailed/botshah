@@ -1,3 +1,22 @@
+const shipAtlas = new Image();
+shipAtlas.src='/naval-ships.png';
+const shipCrops = {
+  4:[43,30,1456,300],
+  3:[109,365,998,232],
+  2:[106,638,659,166],
+  1:[110,851,299,132]
+};
+function paintShip(canvas,size) {
+  const [x,y,width,height]=shipCrops[size];
+  canvas.width=width;canvas.height=height;
+  const paint=()=>{
+    const context=canvas.getContext('2d');
+    context.clearRect(0,0,width,height);
+    context.drawImage(shipAtlas,x,y,width,height,0,0,width,height);
+  };
+  if(shipAtlas.complete&&shipAtlas.naturalWidth)paint();
+  else shipAtlas.addEventListener('load',paint,{once:true});
+}
 const sizes = [4,3,3,2,2,2,1,1,1,1];
 const letters = 'АБВГДЕЖЗИК';
 const coordinate = cell => letters[cell%10]+(Math.floor(cell/10)+1);
@@ -176,7 +195,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
       model.setAttribute('aria-hidden','true');model.style.setProperty('--ship-length',ship.length);
       model.style.gridColumn=(sorted[0]%10+2)+' / span '+(vertical?1:ship.length);
       model.style.gridRow=(Math.floor(sorted[0]/10)+2)+' / span '+(vertical?ship.length:1);
-      const art=node('span',null,'naval-ship-art');art.dataset.size=ship.length;model.append(art);
+      const art=node('canvas',null,'naval-ship-art');art.dataset.size=ship.length;paintShip(art,ship.length);model.append(art);
       const damaged=self?state.incoming:state.shots.filter(shot=>shot.hit).map(shot=>shot.cell);
       model.classList.toggle('destroyed',ship.every(cell=>damaged.includes(cell)));
       board.append(model);
