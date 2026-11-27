@@ -804,7 +804,6 @@ for (const button of document.querySelectorAll('[data-game]')) {
     setupGame = button.dataset.game;
     el('setup-title').textContent = labels[setupGame];
     el('opponent-mode').value = 'friend';
-    el('naval-turn-label').hidden=el('naval-turn-rule').hidden=setupGame!=='battleship';
     updateSetupClock();
     el('setup').returnValue = '';
     el('setup').showModal();
@@ -818,7 +817,7 @@ el('setup').onclose = () => {
   if (el('setup').returnValue !== 'create') return;
     const mode = el('opponent-mode').value;
   perform(async () => show(await api('',{game:setupGame,clock:mode === 'friend' && setupGame !== 'battleship' ? el('clock-mode').value : 'none',
-    turnRule:setupGame==='battleship'?el('naval-turn-rule').value:undefined,training:mode === 'friend' ? null : mode})));
+    training:mode === 'friend' ? null : mode})));
 };
 for (const button of document.querySelectorAll('[data-puzzle]')) {
   button.onclick = () => perform(async () => show(await api('/puzzle',{game:button.dataset.puzzle})));
@@ -942,15 +941,14 @@ async function loadRooms(archived = false) {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'room-close';
-    const resign = room.started && room.training !== 'local';
-    close.textContent = resign ? 'Сдаться' : 'Отозвать';
+    close.textContent = 'Удалить';
     close.setAttribute('aria-label',close.textContent+' — '+labels[room.game]);
     close.onclick = () => {
-      const question = resign ? 'Сдаться? Сопернику засчитается победа.' : 'Отозвать партию? Приглашение перестанет действовать.';
+      const question = 'Удалить партию для обоих игроков без изменения счёта?';
       if (!window.confirm(question)) return;
       perform(async () => {
         try {
-          await api('/'+room.id+'/close',{intent:resign ? 'resign' : 'withdraw',version:room.version});
+          await api('/'+room.id+'/close',{intent:'delete',version:room.version});
         } catch (error) {
           if (error.status === 409 || error.status === 410) await loadRooms();
           throw error;

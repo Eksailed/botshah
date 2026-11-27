@@ -106,9 +106,14 @@ test('Ловушки сохраняются приватно, повтор вы�
   sql.prepare('UPDATE battleship_states SET state=? WHERE room_id=?').run(JSON.stringify(state),id);
   const before=await call(11,{},id,undefined,'GET');assert.equal(before.bombsEnabled,true);assert.deepEqual(before.bombs,[]);assert.equal(before.enemyBombs,undefined);
   const next=await call(11,{kind:'shot',cell:target,version:before.version},id,'move');
+  assert.deepEqual(before.battleLog,[]);
+  assert.deepEqual(next.battleLog,[next.lastAction]);
   assert.equal(next.lastAction.bombExplosions.length,1);assert.deepEqual(next.enemySpentBombs,[target]);
   await assert.rejects(call(11,{kind:'shot',cell:target,version:before.version},id,'move'),{status:409});
-  assert.equal((await call(11,{},id,undefined,'GET')).version,next.version);
+  const reloaded=await call(11,{},id,undefined,'GET');
+  assert.equal(reloaded.version,next.version);
+  assert.deepEqual(reloaded.battleLog,next.battleLog);
+  assert.deepEqual((await call(22,{},id,undefined,'GET')).battleLog,next.battleLog);
   const legacy=JSON.parse(sql.prepare('SELECT state FROM battleship_states WHERE room_id=?').get(id).state);delete legacy.bombRules;
   sql.prepare('UPDATE battleship_states SET state=? WHERE room_id=?').run(JSON.stringify(legacy),id);
   assert.equal((await call(11,{},id,undefined,'GET')).bombsEnabled,false);

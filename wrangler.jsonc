@@ -1,5 +1,5 @@
 {
-  "name": "botshah",
+  "name": "botshah-play",
   "main": "src/worker.js",
   "compatibility_date": "2026-11-23",
   "compatibility_flags": [
@@ -13,7 +13,7 @@
     ]
   },
   "vars": {
-    "BOT_USERNAME": "DoskaBotshahBot"
+    "BOT_USERNAME": "DoskaPlayBot"
   },
   "d1_databases": [
     {

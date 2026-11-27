@@ -166,6 +166,10 @@ export function act(original,side,action) {
     const sunkAfter=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))).length;
     const sunkShips=enemy.fleet.filter(ship=>ship.every(cell=>player.shots.includes(cell))&&!ship.every(cell=>original.players[side].shots.includes(cell)));
     game.lastAction={side,kind,targets,version:game.version+1,hitCount,sunkCount:sunkAfter-sunkBefore,sunkShips,mineTriggered:mine,bombExplosions};
+    if (kind === 'shot') {
+      const prior = game.battleLog ?? (original.lastAction?.kind === 'shot' ? [original.lastAction] : []);
+      game.battleLog = [...prior, game.lastAction].slice(-20);
+    }
   }
   game.version++;
   return game;
@@ -179,6 +183,7 @@ export function playerView(game,side) {
     placed:Boolean(player.fleet),opponentReady:Boolean(enemy.fleet),fleet:player.fleet,mine:player.mine,
     incoming:enemy.shots,shots:player.shots.map(cell=>({cell,hit:enemy.fleet?.flat().includes(cell)??false})),
     water:surroundingWater(enemy.fleet,player.shots),incomingWater:surroundingWater(player.fleet,enemy.shots),
+    battleLog:game.battleLog ?? (game.lastAction?.kind === 'shot' ? [game.lastAction] : []),
     sunk,scans:player.scans,stock:player.stock,blocked:player.blocked,
     ...(game.result?{enemyFleet:enemy.fleet}:{}),lastAction:game.lastAction?.kind === 'scan' && game.lastAction.side !== side ? {side:game.lastAction.side,kind:'scan'} : game.lastAction};
 }

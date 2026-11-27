@@ -225,11 +225,11 @@ async function room(request, env, path, ctx) {
   if (action === 'close') {
     if (state.result) fail(409,'Партия уже завершена');
     const required = history.length && row.training !== 'local' ? 'resign' : 'withdraw';
-    if (input.intent !== required) fail(409,'Партия изменилась. Обновите список');
-    const result = required === 'withdraw' ? 'cancelled' : side === 'w' ? 'b' : 'w';
+    if (input.intent !== 'delete' && input.intent !== required) fail(409,'Партия изменилась. Обновите список');
+    const result = input.intent !== 'resign' ? 'cancelled' : side === 'w' ? 'b' : 'w';
     const changed = await db.prepare(
       'UPDATE rooms SET result = ?, result_reason = ?, updated_at = ? WHERE id = ? AND history = ? AND result IS NULL'
-    ).bind(result,required,now,id,row.history).run();
+    ).bind(result,input.intent,now,id,row.history).run();
     if (!changed.meta.changes) fail(409,'Партия изменилась. Обновите список');
     return Response.json({ok:true});
   }

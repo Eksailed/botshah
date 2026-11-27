@@ -44,11 +44,29 @@ function attackMessage(state) {
   if(hitCount)return prefix+'Попадание!'+(hitCount>1?' Повреждено палуб: '+hitCount:'');
   return prefix+'Мимо';
 }
+function battleLogLines(action, name) {
+  const waves = action.bombExplosions ?? [];
+  const reflectedSinks = new Set(waves.filter(wave => wave.owner === action.side)
+    .flatMap(wave => wave.sunkShips.map(ship => ship.join('-'))));
+  const directSinks = (action.sunkShips ?? []).filter(ship => !reflectedSinks.has(ship.join('-')));
+  const trap = waves.some(wave => wave.owner !== action.side && wave.cell === action.targets[0]);
+  const outcome = directSinks.length ? 'корабль потоплен'
+    : action.hitCount ? 'попадание' : trap ? 'выстрел в ловушку' : 'мимо';
+  return [
+    name(action.side)+' · '+coordinate(action.targets[0])+' · '+outcome,
+    ...waves.map(wave => {
+      const victim = wave.owner === 'w' ? 'b' : 'w';
+      const damage = wave.hitCount ? 'повреждено палуб: '+wave.hitCount : 'без новых повреждений';
+      const sunk = wave.sunkShips.length ? ' · потоплено кораблей: '+wave.sunkShips.length : '';
+      return 'Ловушка '+coordinate(wave.cell)+' · взрыв на поле «'+name(victim)+'» · '+damage+sunk;
+    })
+  ];
+}
 export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   let state, own=false, tool='shot', origin=null, direction='horizontal', edge='top';
   let bombs=[], placementTool='ships';
   let fleet=[], mine=null, timer, busy=false, active=false, generation=0, message='';
-  let animating=false, selectedShip;
+  let animating=false, selectedShip, logOpen=false;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   function node(tag,text,className) {
     const element = document.createElement(tag);
@@ -157,6 +175,101 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     fleet[index]=ship;selectedShip=undefined;message='';draw();
     animateNavalPlacement(root.querySelector('[data-ship-index="'+index+'"]'),reduced.matches,old);
   }
+  function enablePlacementDrag(board) {
+    let drag;
+    let suppressClick = false;
+    const highlight = (cells, invalid = false, ship = false) => {
+      const inside = cells.filter(cell => cell >= 0);
+      for (const square of board.querySelectorAll('.naval-cell')) {
+        const cell = Number(square.dataset.cell);
+        const footprint = inside.includes(cell);
+        const halo = ship && inside.some(deck =>
+          Math.abs(cell % 10 - deck % 10) <= 1 &&
+          Math.abs(Math.floor(cell / 10) - Math.floor(deck / 10)) <= 1
+        );
+        square.classList.toggle('naval-drag-target', footprint && !invalid);
+        square.classList.toggle('naval-drag-invalid', invalid && (footprint || halo));
+      }
+    };
+    const canMoveBomb = (target, source) => target >= 0 &&
+      !fleet.some(ship => ship.includes(target)) &&
+      (target === source || !bombs.includes(target));
+    const destination = event => {
+      const square = document.elementFromPoint(event.clientX,event.clientY)?.closest('.naval-cell');
+      if (!board.contains(square)) return null;
+      const target = Number(square.dataset.cell);
+      const dx = target % 10 - drag.cell % 10;
+      const dy = Math.floor(target / 10) - Math.floor(drag.cell / 10);
+      return drag.cells.map(cell => {
+        const x = cell % 10 + dx, y = Math.floor(cell / 10) + dy;
+        return x < 0 || x > 9 || y < 0 || y > 9 ? -1 : y * 10 + x;
+      });
+    };
+    board.addEventListener('pointerdown', event => {
+      suppressClick = false;
+      if (drag || busy || animating || !event.isPrimary || event.button !== 0) return;
+      const square = event.target.closest('.naval-cell');
+      if (!square) return;
+      const cell = Number(square.dataset.cell);
+      const index = fleet.findIndex(ship => ship.includes(cell));
+      if (index < 0 && !bombs.includes(cell)) return;
+      drag = {pointer:event.pointerId, square, cell, index, cells:fleet[index] ?? [cell],
+        x:event.clientX, y:event.clientY, moved:false};
+      square.setPointerCapture(event.pointerId);
+    });
+    board.addEventListener('pointermove', event => {
+      if (event.pointerId !== drag?.pointer) return;
+      if (!drag.moved && Math.hypot(event.clientX-drag.x,event.clientY-drag.y) < 6) return;
+      drag.moved = true;
+      const cells = destination(event);
+      if (!cells) {
+        highlight([]);
+        return;
+      }
+      const ship = drag.index >= 0;
+      const valid = ship ? fits(cells,drag.index) : canMoveBomb(cells[0],drag.cell);
+      highlight(cells,!valid,ship);
+    });
+    board.addEventListener('click', event => {
+      if (!suppressClick) return;
+      event.stopImmediatePropagation();
+    }, true);
+    const finish = (event, cancelled) => {
+      if (event.pointerId !== drag?.pointer) return;
+      const current = drag;
+      const cells = !cancelled && current.moved ? destination(event) : null;
+      drag = null;
+      suppressClick = current.moved;
+      highlight([]);
+      if (!cells) return;
+      if (current.index < 0) {
+        const target = cells[0];
+        if (target === current.cell) return;
+        if (!canMoveBomb(target,current.cell)) {
+          message = 'Перетащите бомбу в свободную клетку';
+        } else {
+          bombs = bombs.map(cell => cell === current.cell ? target : cell);
+          message = '';
+        }
+      } else {
+        if (cells.every((cell,i) => cell === current.cells[i])) return;
+        if (!fits(cells,current.index)) {
+          invalidPlacement(cells);
+          return;
+        }
+        fleet[current.index] = cells;
+        selectedShip = undefined;
+        message = '';
+      }
+      draw();
+    };
+    board.addEventListener('pointerup', event => finish(event,false));
+    board.addEventListener('pointercancel', event => finish(event,true));
+    board.addEventListener('lostpointercapture', event => finish(event,true));
+    board.addEventListener('contextmenu', event => {
+      if (event.target.closest('.naval-draggable')) event.preventDefault();
+    });
+  }
   function rotateShip() {
     const nextDirection=direction==='horizontal'?'vertical':'horizontal';
     if(selectedShip===undefined){direction=nextDirection;draw();return;}
@@ -195,7 +308,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     const heading=node('div',null,'naval-heading');
     heading.append(node('strong',status),node('span',state.mode==='arsenal'?'Арсенал':'Классика'));
     root.append(heading);
-    root.append(node('p',state.turnRule==='alternating'?'Ходы по очереди · один выстрел':'Попадание даёт дополнительный выстрел','naval-help'));
+    root.append(node('p','Попадание даёт дополнительный выстрел','naval-help'));
     if (!setup) {
       const summary=node('div',null,'naval-fleets');
       for(const [index,[name,sunk]]of [[yours,(state.fleet??[]).filter(ship=>ship.every(cell=>state.incoming.includes(cell)))],[opponent,state.sunk]].entries()){
@@ -235,6 +348,25 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     if(report){
       const feedback=node('p',report,'naval-attack-report');
       feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');root.append(feedback);
+    }
+    if (!setup && state.phase !== 'setup') {
+      const journal = node('details',null,'naval-journal');
+      journal.open = logOpen;
+      const toggle = node('summary','Журнал боя');
+      toggle.onclick = event => {
+        event.preventDefault();
+        logOpen = journal.open = !journal.open;
+      };
+      const events = node('ol',null,'naval-journal-events');
+      const name = side => side === state.side ? yours : opponent;
+      for (const action of [...(state.battleLog ?? [])].reverse()) {
+        const [shot,...explosions] = battleLogLines(action,name);
+        const row = node('li',shot);
+        for (const line of explosions) row.append(node('span',line,'naval-journal-blast'));
+        events.append(row);
+      }
+      journal.append(toggle,events.childElementCount ? events : node('p','Выстрелов пока не было','naval-help'));
+      root.append(journal);
     }
     if (message) root.append(node('p',message,'naval-message'));
     const controls=node('div',null,'naval-controls');
@@ -288,7 +420,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         const incoming=state.incoming.includes(cell);
         const hit=self?incoming&&occupied:shot?.hit;
         const sunk=self?visibleFleet.some(ship=>ship.includes(cell)&&ship.every(deck=>state.incoming.includes(deck))):state.sunk.flat().includes(cell);
-        const element=button(setup&&cell===mine?'◆':'',()=>{
+        const element=button(setup&&state.mode==='arsenal'&&cell===mine?'◆':'',()=>{
           if(setup)place(cell);
           else {origin=cell;message='';draw();}
         },'naval-cell');
@@ -297,6 +429,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
           element.setAttribute('title','Ваша бомба');
         }
         element.dataset.cell=cell;
+        element.classList.toggle('naval-draggable',setup&&(occupied||bombs.includes(cell)));
         element.style.gridArea=(row+2)+' / '+(col+2);
         element.disabled=busy||animating || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&(shots.has(cell)||water.has(cell)));
         element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':water.has(cell)?'Вода вокруг потопленного корабля':shot?'Промах':'Клетка'));
@@ -330,6 +463,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
       model.classList.toggle('destroyed',ship.every(cell=>damaged.includes(cell)));
       board.append(model);
     }
+    if(setup)enablePlacementDrag(board);
     root.append(board);
     const actions=node('div',null,'naval-actions');
     if(setup) {
@@ -370,6 +504,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     if(previous?.id===next.id&&next.handoff&&next.lastAction?.kind==='shot'&&next.lastAction.version===next.version&&next.lastAction.side===previous.side){
       const currentGeneration=generation;
       const presentation=structuredClone(previous);
+      presentation.battleLog=[...(previous.battleLog??[]),next.lastAction].slice(-20);
       presentation.lastAction=next.lastAction;presentation.version=next.version;presentation.turn=next.turn;
       for(const cell of next.lastAction.targets){
         if(!presentation.shots.some(shot=>shot.cell===cell))presentation.shots.push({cell,hit:Boolean(next.lastAction.hitCount)});
@@ -393,7 +528,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     }
     const changed=!previous||next.id!==previous.id||next.version!==previous.version||next.ready!==previous.ready;
     if (!active) {active=true;generation++;}
-    if (next.id!==previous?.id || next.side!==previous?.side) {fleet=[];bombs=[];placementTool='ships';mine=null;selectedShip=undefined;own=false;tool='shot';}
+    if (next.id!==previous?.id || next.side!==previous?.side) {logOpen=false;fleet=[];bombs=[];placementTool='ships';mine=null;selectedShip=undefined;own=false;tool='shot';}
     state=next;
     if(changed)origin=null;
     onUpdate(next);
