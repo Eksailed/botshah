@@ -890,3 +890,10 @@ main:has(#naval-game:not([hidden])) #status { display:none; }
 .naval-journal-events { max-height:125px; overflow-y:auto; padding:0 0 0 1.35em; margin:6px 0 0; overscroll-behavior:contain; }
 .naval-journal-events li { padding:4px 0; }
 .naval-journal-blast { display:block; margin-top:3px; color:#efd5a2; }
+
+#game .four-frame { width: min(100%,calc(100cqh * 7 / 6),530px); }
+#game .four-frame #board { grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(6,minmax(0,1fr)); }
+#game .four-frame .cell { cursor:pointer; }
+
+#game .big-tic-frame #board { grid-template-columns:repeat(10,minmax(0,1fr)); grid-template-rows:repeat(10,minmax(0,1fr)); gap:2px; }
+#game .big-tic-frame .cell { border-radius:clamp(3px,1vw,7px); }

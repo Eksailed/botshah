@@ -66,6 +66,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   let state, own=false, tool='shot', origin=null, direction='horizontal', edge='top';
   let bombs=[], placementTool='ships';
   let fleet=[], mine=null, timer, busy=false, active=false, generation=0, message='';
+  let reconnecting=false, pendingVersion, networkMessage='';
   let animating=false, selectedShip, logOpen=false;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   function node(tag,text,className) {
@@ -76,44 +77,67 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   }
   function button(text,action,className='') {
     const element=node('button',text,className);
-    element.type='button';element.onclick=action;element.disabled=busy||animating;
+    element.type='button';element.onclick=action;element.disabled=busy||animating||reconnecting;
     return element;
   }
   function sound(kind) { try { onSound?.(kind); } catch {} }
   function schedule() {
     clearTimeout(timer);
-    if (!active || state?.result || state?.handoff || state?.training==='local') return;
+    if (!active || (!reconnecting && (state?.result || state?.handoff || state?.training==='local'))) return;
     timer=setTimeout(async()=>{
       if (busy || animating || document.hidden) { schedule();return; }
-      const computer=state.training && state.phase==='battle' && state.turn==='b';
+      const computer=!reconnecting && state.training && state.phase==='battle' && state.turn==='b';
       if (computer) {
-        await run(()=>api('/'+state.id+'/computer',{version:state.version}));
+        await run(()=>api('/'+state.id+'/computer',{version:state.version}),true);
         return;
       }
-      if (state.training) return;
+      if (state.training && !reconnecting) return;
       const snapshot=state, currentGeneration=generation;
       try {
         const next=await api('/'+snapshot.id);
-        if (active && generation===currentGeneration && state===snapshot && !busy && !animating &&
-            (next.version!==snapshot.version || next.ready!==snapshot.ready)) await load(next);
+        if (!active || generation!==currentGeneration || state!==snapshot || busy || animating) return;
+        const recovered = reconnecting;
+        if (recovered) {
+          reconnecting = false;
+          networkMessage = pendingVersion !== undefined && next.version === pendingVersion
+            ? 'Сервер не подтвердил действие. Проверьте поле и повторите.'
+            : 'Связь восстановлена. Поле проверено.';
+          pendingVersion = undefined;
+        }
+        if (next.version!==snapshot.version || next.ready!==snapshot.ready || next.handoff!==snapshot.handoff) await load(next);
+        else if (recovered) draw();
       } catch(error) {
-        if(active && generation===currentGeneration && state===snapshot && !busy && error.status===410) {
+        if (!active || generation!==currentGeneration || state!==snapshot || busy) return;
+        if (error.status===410) {
           stop();onMenu();return;
+        }
+        if (error.network && !reconnecting) {
+          reconnecting = true;
+          networkMessage = 'Связь потеряна. Проверяем поле…';
+          draw();
         }
       } finally {
         if(active && generation===currentGeneration)schedule();
       }
-    },1500);
+    },reconnecting?2500:1500);
   }
-  async function run(action) {
-    if (busy || animating || !active) return;
-    busy=true;message='';draw();
+  async function run(action, sending=false) {
+    if (busy || animating || reconnecting || !active) return;
+    busy=true;message='';networkMessage=sending?'Отправляем ход…':'';draw();
+    const version=state.version;
     const currentGeneration=generation;
     try {
       const next=await action();
-      if (active && generation===currentGeneration && next) await load(next);
+      if (active && generation===currentGeneration && next) { networkMessage='';await load(next); }
     } catch(error) {
       if (!active || generation!==currentGeneration) return;
+      if (error.network) {
+        reconnecting=true;
+        pendingVersion=version;
+        networkMessage='Связь потеряна. Проверяем поле…';
+        return;
+      }
+      networkMessage='';
       message=error.message;
       if (error.status===409) {
         try { await load(await api('/'+state.id)); } catch {}
@@ -122,8 +146,8 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
       if (active && generation===currentGeneration) { busy=false;draw();schedule(); }
     }
   }
-  function submit(data) { return run(()=>api('/'+state.id+'/move',{...data,version:state.version})); }
-  function stop() { active=false;busy=false;animating=false;generation++;clearTimeout(timer); }
+  function submit(data) { return run(()=>api('/'+state.id+'/move',{...data,version:state.version}),true); }
+  function stop() { active=false;busy=false;animating=false;reconnecting=false;pendingVersion=undefined;networkMessage='';generation++;clearTimeout(timer); }
   async function leave() {
     if (busy||animating) return;
     if (state.training==='local' && !state.result && !state.handoff) {
@@ -293,6 +317,11 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
   function draw() {
     if (!state || !active) return;
     root.replaceChildren();
+    if(networkMessage){
+      const status=node('p',networkMessage,'naval-attack-report');
+      status.setAttribute('role','status');
+      root.append(status);
+    }
     if (state.handoff) {
       const panel=node('div',null,'naval-handoff');
       panel.append(node('span','⚓','naval-anchor'),node('h2','Передайте телефон'),
@@ -431,7 +460,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         element.dataset.cell=cell;
         element.classList.toggle('naval-draggable',setup&&(occupied||bombs.includes(cell)));
         element.style.gridArea=(row+2)+' / '+(col+2);
-        element.disabled=busy||animating || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&(shots.has(cell)||water.has(cell)));
+        element.disabled=busy||animating||reconnecting || !setup && (self||Boolean(state.result)||state.phase!=='battle'||state.turn!==state.side||tool==='shot'&&(shots.has(cell)||water.has(cell)));
         element.setAttribute('aria-label',coordinate(cell)+' '+(hit?'Попадание':self&&occupied?'Корабль':water.has(cell)?'Вода вокруг потопленного корабля':shot?'Промах':'Клетка'));
         element.classList.toggle('ship',self&&occupied||sunk||Boolean(state.result&&!self&&state.enemyFleet?.flat().includes(cell)));
         element.classList.toggle('hit',Boolean(hit));element.classList.toggle('sunk',sunk);
@@ -468,7 +497,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
     const actions=node('div',null,'naval-actions');
     if(setup) {
       const ready=button(busy?'Сохраняем…':'Флот готов',()=>submit({kind:'place',fleet,mine,bombs}),'brass');
-      ready.disabled=busy||animating||fleet.length!==10||state.mode==='arsenal'&&mine===null;actions.append(ready);
+      ready.disabled=busy||animating||reconnecting||fleet.length!==10||state.mode==='arsenal'&&mine===null;actions.append(ready);
     } else if(state.phase==='battle'&&!own&&!state.result) {
       if(tool==='plane')actions.append(button(direction==='horizontal'?'Атака по горизонтали':'Атака по вертикали',()=>{direction=direction==='horizontal'?'vertical':'horizontal';draw();}));
       if(tool==='torpedo') {
@@ -479,7 +508,7 @@ export function navalScreen({root,api,onMenu,onUpdate,onSound}) {
         select.onchange=()=>{edge=select.value;draw();};actions.append(select);
       }
       const fire=button(busy?'Отправляем…':origin===null?'Выберите цель':toolNames[tool]+' · '+coordinate(aim[0]??origin),()=>submit({kind:tool,cell:aim[0],direction,edge}),'brass');
-      fire.disabled=busy||animating||!aim.length||state.turn!==state.side;actions.append(fire);
+      fire.disabled=busy||animating||reconnecting||!aim.length||state.turn!==state.side;actions.append(fire);
     }
     root.append(actions);
     if(state.scans.length&&!own)root.append(node('p',state.scans.map(scan=>coordinate(scan.cell)+' · '+scan.count+' целых палуб, ход '+scan.version).join(' / '),'naval-help'));

@@ -1,3 +1,4 @@
+import { bestConnectFourMove } from './connectfour.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Chess } from 'chess.js';
 import { bestTicTacToeMove } from './tictactoe.js';
@@ -6,7 +7,7 @@ import { draughts, step } from './draughts.js';
 const sign = (token, data) => createHmac('sha256',token).update('challenge:'+data).digest('base64url').slice(0,22);
 
 export function challenge(token, owner, game, rules, id) {
-  const data = [owner,game === 'battleship' ? 'n' : game === 'chess' ? 'c' : game === 'tictactoe' ? 't' : rules === 'strict' ? 's' : 'd',id].join('.');
+  const data = [owner,game === 'battleship' ? 'n' : game === 'chess' ? 'c' : game === 'big-tictactoe' ? 'g' : game === 'connectfour' ? 'f' : game === 'tictactoe' ? 't' : rules === 'strict' ? 's' : 'd',id].join('.');
   return 'i_'+Buffer.from(data).toString('base64url')+'_'+sign(token,data);
 }
 
@@ -15,9 +16,9 @@ export function readChallenge(token, payload) {
   if (!match) return null;
   const data = Buffer.from(match[1],'base64url').toString();
   if (!timingSafeEqual(Buffer.from(match[2]),Buffer.from(sign(token,data)))) return null;
-  const parts = /^(\d+)\.([csdtn])\.([a-f0-9]{24})$/.exec(data);
+  const parts = /^(\d+)\.([csdtnfg])\.([a-f0-9]{24})$/.exec(data);
   if (!parts || !Number.isSafeInteger(Number(parts[1])) || Number(parts[1]) <= 0) return null;
-  return {owner:Number(parts[1]),game:parts[2] === 'n' ? 'battleship' : parts[2] === 'c' ? 'chess' : parts[2] === 't' ? 'tictactoe' : 'draughts',
+  return {owner:Number(parts[1]),game:parts[2] === 'n' ? 'battleship' : parts[2] === 'c' ? 'chess' : parts[2] === 'g' ? 'big-tictactoe' : parts[2] === 'f' ? 'connectfour' : parts[2] === 't' ? 'tictactoe' : 'draughts',
     rules:parts[2] === 's' ? 'strict' : 'huff',id:parts[3]};
 }
 
@@ -28,6 +29,8 @@ export function computerMove(state, level, game, rules) {
   const {moves,board} = state;
   if (!moves.length) return undefined;
   if (level === 'easy') return moves[Math.floor(Math.random()*moves.length)];
+  if (game === 'big-tictactoe') return bestConnectFourMove(state,true);
+  if (game === 'connectfour') return bestConnectFourMove(state);
   if (game === 'tictactoe') return bestTicTacToeMove(state);
   const material = piece => piece ? (values[piece[1]] ?? 0) : 0;
   const weight = move => {

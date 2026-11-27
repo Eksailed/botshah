@@ -1,7 +1,8 @@
 import {navalScreen} from './battleship.js';
 const tg = window.Telegram?.WebApp;
 const el = id => document.getElementById(id);
-const labels = {chess:'Шахматы',draughts:'Русские шашки',tictactoe:'Крестики-нолики',battleship:'Морской бой'};
+const labels = {chess:'Шахматы',draughts:'Русские шашки',tictactoe:'Крестики-нолики',battleship:'Морской бой',connectfour:'Четыре в ряд','big-tictactoe':'Большие крестики-нолики'};
+const isMarkGame = game => game === 'tictactoe' || game === 'connectfour' || game === 'big-tictactoe';
 const symbols = {k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
 const names = {k:'король',q:'ферзь',r:'ладья',b:'слон',n:'конь',p:'пешка'};
 const roomId = /^[a-f0-9]{24}$/;
@@ -10,7 +11,7 @@ let last, review, clockReceived, setupGame, continueId, computerTimer, puzzleHin
 const trainingTotal = 3;
 let trainingProgress = {};
 let connectionLost = false, pendingMove, drag, boardTouch, suppressBoardClick = false;
-const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',three:'Три знака в ряд',resign:'Сдача',timeout:'Время вышло',
+const reasons = {mate:'Мат',blocked:'Нет шашек или ходов',three:'Три знака в ряд',four:'Четыре знака в ряд',five:'Пять знаков в ряд',resign:'Сдача',timeout:'Время вышло',
   agreement:'По согласию',rules:'По правилам игры'};
 
 async function api(path,body) {
@@ -28,7 +29,11 @@ async function api(path,body) {
   if ([502,503,504].includes(response.status)) {
     throw Object.assign(new Error('Сервер временно недоступен'),{network:true});
   }
-  const data = await response.json();
+  let data;
+  try { data = await response.json(); }
+  catch {
+    throw Object.assign(new Error('Не удалось получить ответ сервера'),{network:true});
+  }
   if (!response.ok) throw Object.assign(new Error(data.error),{status:response.status});
   return data;
 }
@@ -51,11 +56,11 @@ function restoreConnection(next) {
   if (!move || next.version > move.version) {
     connectionStatus(move ? 'Связь восстановлена. Позиция обновлена.' : '');
   } else {
-    connectionStatus('Ход не отправлен. Сделайте его ещё раз.','offline');
+    connectionStatus('Сервер не подтвердил ход. Проверьте позицию и повторите ход.','offline');
   }
 }
 window.addEventListener('offline',() => {
-  if (state && !state.task && !state.training && !state.result) lostConnection();
+  if (state && !state.task && state.game !== 'battleship' && !state.result) lostConnection();
 });
 window.addEventListener('online',() => { void refreshMatch(); });
 
@@ -84,7 +89,7 @@ function lobby() {
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const boardSide = () => state.training === 'local' ? 'w' : state.side;
-const cell = index => el('board').children[state.game !== 'tictactoe' && boardSide() === 'b' ? 63-index : index];
+const cell = index => el('board').children[!isMarkGame(state.game) && boardSide() === 'b' ? 63-index : index];
 
 const moveSound = el('move-sound');
 const moveVibration = el('move-vibration');
@@ -246,7 +251,7 @@ async function animateMove(move, capture) {
   }
 }
 
-const colorName = (side,game = state.game) => game === 'tictactoe'
+const colorName = (side,game = state.game) => isMarkGame(game)
   ? (side === 'w' ? 'Крестики' : 'Нолики') : (side === 'w' ? 'Белые' : 'Чёрные');
 function resultLabel(match) {
   if (match.game === 'battleship' && match.training === 'local') return (match.result === 'w' ? 'Первый' : 'Второй')+' игрок победил';
@@ -259,9 +264,9 @@ function presentMatchResult(next) {
   const outcome = next.result === 'draw' ? 'draw' : next.training === 'local' || next.result === next.side ? 'win' : 'loss';
   const reason = el('match-result-reason');
   sheet.dataset.outcome = outcome;
-  if (next.game !== 'tictactoe') woodSound(outcome,next.game);
-  if (next.game === 'tictactoe' && outcome !== 'draw') ceramicSound(outcome);
-  sheet.classList.toggle('tic-result',next.game === 'tictactoe');
+  if (!isMarkGame(next.game)) woodSound(outcome,next.game);
+  if (isMarkGame(next.game) && outcome !== 'draw') ceramicSound(outcome);
+  sheet.classList.toggle('tic-result',isMarkGame(next.game));
   sheet.returnValue = '';
   el('match-result-title').textContent = resultLabel(next);
   reason.textContent = reasons[next.reason] ?? '';
@@ -279,10 +284,10 @@ async function animateTicTacToe(next,placed,finished) {
     const mark = cell(next.lastMove.to)?.firstElementChild;
     if (mark && !reducedMotion.matches) {
       await mark.animate([
-        {transform:'translateY(-14%) scale(1.14)',opacity:0},
+        {transform:next.game === 'connectfour' ? 'translateY(-'+(Math.floor(next.lastMove.to/7)*150+90)+'%)' : 'translateY(-14%) scale(1.14)',opacity:0},
         {transform:'scale(.91)',opacity:1,filter:'brightness(1.4)',offset:.65},
         {transform:'scale(1)',opacity:1}
-      ],{duration:150,easing:'ease-out'}).finished;
+      ],{duration:next.game === 'connectfour' ? 320 : 150,easing:'ease-out'}).finished;
     }
   }
   if (!finished || document.hidden || state !== next) return;
@@ -292,14 +297,14 @@ async function animateTicTacToe(next,placed,finished) {
   const effect = document.createElement('span');
   effect.setAttribute('aria-hidden','true');
   const line = next.winningCells;
-  if (line?.length === 3) {
+  if (line?.length >= 3) {
     const origin = board.getBoundingClientRect();
     const center = index => {
       const {left,top,width,height} = cell(index).getBoundingClientRect();
       return [left-origin.left-board.clientLeft+width/2,top-origin.top-board.clientTop+height/2];
     };
     const [x,y] = center(line[0]);
-    const [endX,endY] = center(line[2]);
+    const [endX,endY] = center(line.at(-1));
     effect.className = 'tic-winning-line';
     effect.style.left = x+'px';
     effect.style.top = y+'px';
@@ -368,7 +373,7 @@ async function show(next) {
   finishDrag();
   const finished = Boolean(!next.task && next.result && state?.id === next.id && !state.result);
   const delta = next.version-state?.version;
-  const tic = next.game === 'tictactoe';
+  const tic = isMarkGame(next.game);
   const placed = tic && state?.id === next.id && delta > 0 && Boolean(next.lastMove);
   if (!tic && state?.id === next.id && delta > 0 && !document.hidden) {
     const frames = next.game === 'draughts' && next.replay?.length >= delta ? next.replay.slice(-delta)
@@ -429,7 +434,7 @@ async function show(next) {
   el('title').textContent = labels[state.game];
   el('lobby').hidden = true;
   el('game').hidden = false;
-  const color = state.game === 'tictactoe' ? (state.side === 'w' ? 'крестиками' : 'ноликами') : state.side === 'w' ? 'белыми' : 'чёрными';
+  const color = isMarkGame(state.game) ? (state.side === 'w' ? 'крестиками' : 'ноликами') : state.side === 'w' ? 'белыми' : 'чёрными';
   const turn = state.turn === state.side ? 'Ваш ход' : 'Ход соперника';
   const local = state.training === 'local';
   const result = resultLabel(state);
@@ -455,7 +460,7 @@ function actions() {
   rule.textContent = state.rules === 'strict' ? 'Обязательное взятие' : 'За фук';
   const canShare = Boolean(state.result && state.score && state.opponent && !review);
   el('opponent-history').hidden = el('share-score').hidden = !canShare;
-  const canDraw = state.ready && !state.task && !state.training && !state.result && !review;
+  const canDraw = state.ready && !state.task && state.game !== 'battleship' && !state.result && !review;
   el('draw-offer').hidden = !canDraw;
   el('draw-offer').disabled = state.drawOffer === 'sent';
   el('draw-offer').textContent = state.drawOffer === 'received' ? 'Принять ничью'
@@ -488,7 +493,7 @@ function drawClocks() {
     ? Math.max(0,clock.now-clock.started+performance.now()-clockReceived) : 0;
   for (const [id,side] of [['self-clock',state.side],['opponent-clock',state.side === 'w' ? 'b' : 'w']]) {
     const seconds = Math.ceil(Math.max(0,clock[side]-(state.turn === side ? elapsed : 0))/1000);
-    if (side === state.side && state.game !== 'tictactoe' && !state.result &&
+    if (side === state.side && !isMarkGame(state.game) && !state.result &&
         seconds > 0 && seconds <= 10 && !timeWarnings.has(state.id)) {
       timeWarnings.add(state.id);
       woodSound('time',state.game);
@@ -503,8 +508,10 @@ function drawClocks() {
 }
 
 function updateBoardFrame() {
-  const tic = state.game === 'tictactoe';
+  const tic = isMarkGame(state.game);
   el('board').closest('.board-frame').classList.toggle('tic-frame',tic);
+  el('board').closest('.board-frame').classList.toggle('four-frame',state.game === 'connectfour');
+  el('board').closest('.board-frame').classList.toggle('big-tic-frame',state.game === 'big-tictactoe');
   const panelHidden = Boolean(state.task || review);
   const playing = !panelHidden && state.ready && !state.result;
   const white = boardSide() === 'w';
@@ -546,8 +553,9 @@ function draw() {
   updateBoardFrame();
   const display = review ?? state;
   const targets = new Set(state.moves.filter(m => m.from === selected).map(m => m.to));
-  const tic = state.game === 'tictactoe';
-  const squares = Array.from({length:tic ? 9 : 64},(_,i) => {
+  const tic = isMarkGame(state.game);
+  const columns = state.game === 'big-tictactoe' ? 10 : state.game === 'connectfour' ? 7 : 3;
+  const squares = Array.from({length:display.board.length},(_,i) => {
     const index = !tic && boardSide() === 'b' ? 63-i : i;
     const piece = display.taken?.includes(index) ? null : display.board[index];
     const button = document.createElement('button');
@@ -563,7 +571,7 @@ function draw() {
     if (selected === index) button.classList.add('selected');
     if (targets.has(index)) button.classList.add('target');
     if (tic) {
-      const description = 'Ряд '+(Math.floor(index/3)+1)+', столбец '+(index%3+1);
+      const description = 'Ряд '+(Math.floor(index/columns)+1)+', столбец '+(index%columns+1);
       button.setAttribute('aria-label',description+', '+(piece ? (piece === 'w' ? 'крестик' : 'нолик') : 'свободно'));
       if (piece) {
         const mark = document.createElement('span');
@@ -618,9 +626,9 @@ async function perform(action) {
 }
 
 function select(index) {
-  if (busy || review || state.solved) return;
-  if (state.game === 'tictactoe') {
-    const move = state.moves.find(item => item.to === index);
+  if (busy || pendingMove || review || state.solved) return;
+  if (isMarkGame(state.game)) {
+    const move = state.moves.find(item => state.game === 'connectfour' ? item.to%7 === index%7 : item.to === index);
     if (move) return send(move);
     return;
   }
@@ -642,6 +650,7 @@ function select(index) {
 }
 
 function send(move) {
+  if (pendingMove) return;
   return perform(async () => {
     if (state.task) {
       selected = undefined;
@@ -650,14 +659,6 @@ function send(move) {
       return;
     }
     const path = '/'+state.id;
-    if (state.training) {
-      try { await show(await api(path+'/move',{...move,version:state.version})); }
-      catch (error) {
-        if (error.status === 409) await show(await api(path));
-        else throw error;
-      }
-      return;
-    }
     pendingMove = {version:state.version};
     connectionStatus('Отправляем ход…');
     try {
@@ -697,7 +698,7 @@ boardSurface.addEventListener('pointerdown',event => {
     boardTouch = {pointer:event.pointerId,from,id:state.id,version:state.version,turn:state.turn};
     boardSurface.setPointerCapture(event.pointerId);
   }
-  if (state.game === 'tictactoe' || state.huff?.length) return;
+  if (isMarkGame(state.game) || state.huff?.length) return;
   if (!state.moves.some(move => move.from === from)) return;
   drag = {pointer:event.pointerId,from,x:event.clientX,y:event.clientY};
 });
@@ -826,13 +827,15 @@ function scheduleComputer() {
   clearTimeout(computerTimer);
   if (!state?.training || state.training === 'local' || state.result || state.turn !== 'b' || review) return;
   computerTimer = setTimeout(() => {
+    if (connectionLost) return;
     if (busy) return scheduleComputer();
     if (!state?.training || state.training === 'local' || state.result || state.turn !== 'b') return;
     perform(async () => {
       const path = '/'+state.id;
       try { await show(await api(path+'/computer',{version:state.version})); }
       catch (error) {
-        if (error.status === 409) await show(await api(path));
+        if (error.network) lostConnection();
+        else if (error.status === 409) await show(await api(path));
         else throw error;
       }
     });
@@ -924,7 +927,7 @@ async function loadRooms(archived = false) {
     }
     if (!archived && room.ready && room.yourTurn) button.classList.add('your-turn');
     title.append(status);
-    if (room.game === 'tictactoe' || room.game === 'battleship') {
+    if (isMarkGame(room.game) || room.game === 'battleship') {
       const illustration = document.createElement('span');
       illustration.className = room.game === 'battleship' ? 'battleship-art' : 'tictactoe-art';
       illustration.setAttribute('aria-hidden','true');
@@ -1017,7 +1020,7 @@ async function showMeetings(opponent,game = 'all') {
   title.textContent = name+' · '+tallyText(totals);
   const filters = document.createElement('div');
   filters.className = 'actions archive-tabs';
-  for (const [id,label] of [['all','Все'],['draughts','Шашки'],['chess','Шахматы'],['tictactoe','Крестики-нолики'],['battleship','Морской бой']]) {
+  for (const [id,label] of [['all','Все'],['draughts','Шашки'],['chess','Шахматы'],['tictactoe','Крестики-нолики'],['big-tictactoe','Большие крестики-нолики'],['connectfour','Четыре в ряд'],['battleship','Морской бой']]) {
     const filter = menuButton(label,() => showMeetings(opponent,id));
     filter.setAttribute('aria-pressed',String(game === id));
     filters.append(filter);
@@ -1103,7 +1106,7 @@ if (!tg?.initData) {
   else if (typeof invite === 'string' && invite.startsWith('i_')) {
     perform(async () => show(await api('/challenge',{payload:invite})));
   }
-  else if (invite === 'chess' || invite === 'draughts' || invite === 'tictactoe' || invite === 'battleship') {
+  else if (invite === 'chess' || invite === 'draughts' || invite === 'tictactoe' || invite === 'big-tictactoe' || invite === 'battleship') {
     perform(async () => show(await api('',{game:invite})));
   }
   setInterval(drawClocks,250);
@@ -1112,17 +1115,19 @@ if (!tg?.initData) {
 
 let refreshingMatch = false;
 async function refreshMatch() {
-  if (refreshingMatch || busy || !state || state.game === 'battleship' || state.task || state.training || review ||
+  if (refreshingMatch || busy || !state || state.game === 'battleship' || state.task || (state.training && !connectionLost) || review ||
       document.hidden || (state.result && state.rematch)) return;
   const snapshot = state;
   refreshingMatch = true;
   try {
     const next = await api('/'+snapshot.id);
     if (state !== snapshot || busy || review || document.hidden) return;
+    const reconnecting = connectionLost;
     restoreConnection(next);
     const changed = ['version','ready','result','drawOffer','offer','rematch'].some(key => next[key] !== snapshot[key])
       || next.opponent?.name !== snapshot.opponent?.name || JSON.stringify(next.score) !== JSON.stringify(snapshot.score);
     if (changed) await perform(() => show(next));
+    else if (reconnecting) scheduleComputer();
   } catch (error) {
     if (error.network && state === snapshot && !busy && !snapshot.result) lostConnection();
     if (error.status === 410 && state === snapshot && !busy && !review) {

@@ -22,12 +22,12 @@ async function webhook(request, env, origin) {
   }
   const {message, inline_query: query} = await body(request);
   if (query) {
-    const games = [['draughts','Русские шашки','huff'],['chess','Шахматы','huff'],['tictactoe','Крестики-нолики','huff'],['battleship','Морской бой','classic']];
+    const games = [['draughts','Русские шашки','huff'],['chess','Шахматы','huff'],['tictactoe','Крестики-нолики','huff'],['big-tictactoe','Большие крестики-нолики','huff'],['battleship','Морской бой','classic']];
     const search = query.query.trim().toLowerCase();
     const results = games.filter(([id,title]) => id.includes(search) || title.toLowerCase().includes(search))
       .map(([id,title,rules]) => ({
         type:'article',id:id+'-'+rules,title,description:'Общая партия для двоих',
-        thumbnail_url:(env.APP_URL || origin).replace(/\/+$/,'')+'/inline-'+id+'.jpg',thumbnail_width:160,thumbnail_height:160,
+        thumbnail_url:(env.APP_URL || origin).replace(/\/+$/,'')+'/inline-'+(id === 'big-tictactoe' ? 'tictactoe' : id)+'.jpg',thumbnail_width:160,thumbnail_height:160,
         input_message_content:{message_text:title+' в «Доске»'},
         reply_markup:{inline_keyboard:[[{text:'Открыть партию',url:'https://t.me/'+env.BOT_USERNAME+'?startapp='+challenge(env.BOT_TOKEN,query.from.id,id,rules,roomId())}]]}
       }));
@@ -124,7 +124,7 @@ async function room(request, env, path, ctx) {
     }
     if (post) {
       const {opponent,game = 'all'} = input;
-      if (!Number.isSafeInteger(opponent) || opponent <= 0 || !['all','chess','draughts','tictactoe','battleship'].includes(game)) fail(400,'Выберите соперника');
+      if (!Number.isSafeInteger(opponent) || opponent <= 0 || !['all','chess','draughts','tictactoe','connectfour','big-tictactoe','battleship'].includes(game)) fail(400,'Выберите соперника');
       const {results:groups} = await db.prepare(pairs+"SELECT game,"+score+"FROM meetings WHERE opponent = ?2 GROUP BY game")
         .bind(user,opponent).all();
       if (!groups.length) fail(404,'Нет завершённых встреч с этим соперником');
@@ -148,7 +148,7 @@ async function room(request, env, path, ctx) {
   let id = match?.[1];
   const action = match?.[2];
   if (post && path === '/api/rooms') {
-    if (!['chess','draughts','tictactoe'].includes(input.game)) fail(400,'Выберите игру');
+    if (!['chess','draughts','tictactoe','big-tictactoe'].includes(input.game)) fail(400,'Выберите игру');
     const clock = input.clock ?? 'none';
     if (!Object.hasOwn(clocks,clock)) fail(400,'Выберите контроль времени');
     const rules = 'huff';
@@ -272,7 +272,7 @@ async function room(request, env, path, ctx) {
     } else if (row.clock === 'daily') {
       whiteMs = blackMs = clocks.daily;
     }
-    reason = state.result ? state.result === 'draw' ? 'rules' : row.game === 'chess' ? 'mate' : row.game === 'tictactoe' ? 'three' : 'blocked' : null;
+    reason = state.result ? state.result === 'draw' ? 'rules' : row.game === 'chess' ? 'mate' : row.game === 'big-tictactoe' ? 'five' : row.game === 'connectfour' ? 'four' : row.game === 'tictactoe' ? 'three' : 'blocked' : null;
     const updated = await db.prepare(
       'UPDATE rooms SET history = ?, result = ?, result_reason = ?, updated_at = ?, turn = ?, white_ms = ?, black_ms = ?, started_ms = ? WHERE id = ? AND history = ? AND result IS NULL'
     ).bind(JSON.stringify(history),state.result,reason,now,state.turn,whiteMs,blackMs,row.started_ms === null ? null : now,id,row.history).run();

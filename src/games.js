@@ -1,3 +1,4 @@
+import { connectFour } from './connectfour.js';
 import { Chess } from 'chess.js';
 import { ticTacToe } from './tictactoe.js';
 import { initial, draughts, step } from './draughts.js';
@@ -6,6 +7,8 @@ const square = i => 'abcdefgh'[i%8]+(8-(i>>3));
 const index = s => (8-Number(s[1]))*8+'abcdefgh'.indexOf(s[0]);
 
 export function position(game, history, fen, rules = 'huff') {
+  if (game === 'big-tictactoe') return connectFour(history,true);
+  if (game === 'connectfour') return connectFour(history);
   if (game === 'tictactoe') return ticTacToe(history);
   if (game === 'chess') {
     const chess = new Chess(fen);
