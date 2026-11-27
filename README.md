@@ -63,12 +63,3 @@ npm test
 ```
 
 `npm test` проверяет правила игр, подпись Telegram и базовые операции с комнатами локального сервера.
-
-### Свой бот на Cloudflare
-
-1. Создайте бота в [BotFather](https://t.me/BotFather). Для карточек в переписке включите встроенный режим командой `/setinline`.
-2. Создайте собственную базу D1. Укажите её идентификатор и имя своего бота в конфигурации Worker. Примените `schema.sql`, затем SQL-файлы из `migrations/` в порядке номеров.
-3. Разверните Worker и добавьте `BOT_TOKEN` и `WEBHOOK_SECRET` через `wrangler secret put`. Храните их в секретах Cloudflare или в локальном файле окружения, исключённом из Git.
-4. В BotFather укажите HTTPS адрес Worker для Main Mini App. Настройте [вебхук Telegram](https://core.telegram.org/bots/api#setwebhook) на путь `/telegram` с тем же `WEBHOOK_SECRET`. Включите обновления `message` и `inline_query`.
-
-[wrangler.jsonc](wrangler.jsonc) — конфигурация @DoskaPlayBot. Команда `npx wrangler deploy` публикует приложение основного бота.
